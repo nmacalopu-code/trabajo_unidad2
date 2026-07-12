@@ -1,0 +1,13 @@
+name: tap_unidad2
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - openjdk=17
+  - pyspark
+  - pandas
+  - numpy
+  - matplotlib
+  - scipy
+  - requests
+  - pip

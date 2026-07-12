@@ -1,0 +1,7 @@
+Pipeline Unidad 2 - inicializado correctamente
+Fecha de ejecucion : Sun Jul 12 10:02:40 -04 2026
+figshare_id        : null
+referencia         : input1.fasta
+query              : input2.fasta
+particiones (Spark): 4
+carpeta de salida  : Results

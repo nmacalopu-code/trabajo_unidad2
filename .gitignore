@@ -1,0 +1,19 @@
+# ---- Nextflow (archivos temporales, NO se suben) ----
+work/
+.nextflow/
+.nextflow.log*
+
+# ---- Datos grandes descargados (se regeneran con el pipeline) ----
+Data/*.fasta
+Data/*.fa
+Data/*.fasta.gz
+Data/*.fa.gz
+
+# ---- Python ----
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# ---- Entornos y sistema ----
+env/.conda/
+.DS_Store
