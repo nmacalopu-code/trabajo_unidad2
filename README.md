@@ -93,11 +93,12 @@ nextflow run main.nf \
 
 ## 6. Datos de entrada (Figshare)
 
-- Enlace al registro: _(pendiente)_
-- ID del registro: _(pendiente)_
+- **Enlace al registro:** https://doi.org/10.6084/m9.figshare.32968955
+- **ID del registro:** `32968955`
+- **DOI:** 10.6084/m9.figshare.32968955
+- **Licencia de los datos:** CC BY 4.0
 
-La descarga es **automatica** dentro del pipeline. No se deben copiar los
-archivos manualmente al repositorio.
+La descarga es automatica dentro del pipeline. 
 
 ---
 
