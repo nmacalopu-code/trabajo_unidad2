@@ -1,8 +1,8 @@
 # Trabajo Unidad 2 — Pipeline reproducible con Nextflow, PySpark y Bash
 
-Pipeline reproducible que integra descarga automatica de datos publicos,
+Pipeline reproducible que permite descarga automatica de datos publicos,
 procesamiento distribuido con PySpark, automatizacion con Bash e integracion
-de procesos externos, todo orquestado con **Nextflow**.
+de procesos externos, todo empleando **Nextflow**.
 
 > Estado del proyecto: en construccion (Fase 1 — estructura inicial).
 
@@ -16,7 +16,7 @@ El pipeline esta compuesto por tres procesos principales:
    integracion del analisis de secuencias biologicas del Problema 1 usando PySpark.
 2. **Proceso 2** — Integracion y adaptacion de procesos externos
    (`calculoBashTask` y `generaReporteTask`) del repositorio `tap_pipeline_gen`.
-3. **Proceso 3** — Reporte final propio con al menos un grafico de resultados.
+3. **Proceso 3** — Reporte final.
 
 Todos los resultados se generan dentro de la carpeta `Results/`.
 
@@ -24,7 +24,7 @@ Todos los resultados se generan dentro de la carpeta `Results/`.
 
 ## 2. Requisitos
 
-- Ubuntu / WSL
+- Ubuntu
 - Java (OpenJDK 17)
 - Nextflow
 - Python 3.10+ con: `pyspark`, `pandas`, `numpy`, `matplotlib`, `scipy`, `requests`
@@ -66,7 +66,7 @@ trabajo_unidad2/
 git clone git@github.com:USUARIO/trabajo_unidad2.git
 cd trabajo_unidad2
 
-# 2. (Opcional) Crear el entorno con conda
+# 2. Opcional - Crear el entorno con conda
 conda env create -f env/environment.yml
 conda activate tap_unidad2
 ```
@@ -103,7 +103,6 @@ archivos manualmente al repositorio.
 
 ## 7. Declaracion de uso de IA
 
-_(Completa segun lo que exija tu curso)_ Este trabajo fue desarrollado con
-apoyo de herramientas de inteligencia artificial para explicacion de conceptos,
-estructuracion del codigo y redaccion, revisando y validando manualmente cada
-resultado.
+Este trabajo fue desarrollado con apoyo de Claude.AI, para la corrección de la redacción, 
+aplicacion de algunos conceptos o definiciones, así como comandos que fui aprendiendo en el avance de programación, además de permitirme dudas de validación manual en algunos resultos.
+
