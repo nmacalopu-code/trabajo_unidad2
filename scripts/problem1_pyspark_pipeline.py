@@ -13,6 +13,11 @@ import numpy as np
 import pandas as pd
 from pyspark.sql import SparkSession
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+
 SEED = 42
 LARGOS = [4, 8, 12, 16, 24, 32]
 BASE_MAP = {"A": 0, "C": 1, "G": 2, "T": 3}
@@ -220,11 +225,11 @@ def actividad_recurrencia(genoma_ref, reads, outdir, n_bases=500):
     os.makedirs(figdir, exist_ok=True)
 
     # Autosimilaridad, es decir la referencia consigo misma.
-    # R[i,j] = True si la base i es igual a la base j.
+    # R[i,j], True si la base i es igual a la base j.
     frag_ref = codificar_secuencia(genoma_ref[:n_bases])
     R_auto = (frag_ref.reshape(-1, 1) == frag_ref.reshape(1, -1))
 
-    # Recurrencia cruzada: un read contra la referencia.
+    # Recurrencia cruzada, es decir  un read contra la referencia.
     id_read, seq_read = reads[0]
     frag_read = codificar_secuencia(seq_read[:min(len(seq_read), n_bases)])
     R_cross = (frag_read.reshape(-1, 1) == frag_ref.reshape(1, -1))
@@ -340,6 +345,145 @@ def actividad_codificacion_conv(genoma_ref, outdir, n_bases=2000):
     return df_enc, df_conv
 
 
+
+class CNN1D(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv1d(in_channels=4, out_channels=8, kernel_size=5)
+        self.relu  = nn.ReLU()
+        # AdaptiveAvgPool1d, la etiqueta depende de cuantas bases G/C hay en la ventana, o sea de un conteo. El máximo conserva solo la
+        # activación mas alta y descarta el conteo; el promedio si lo mantiene.
+        self.pool  = nn.AdaptiveAvgPool1d(1)
+        self.fc    = nn.Linear(8, 2)
+
+    def forward(self, x):
+        x = self.relu(self.conv1(x))
+        x = self.pool(x).squeeze(-1)
+        return self.fc(x)
+
+
+def one_hot(X_int):
+    """Convierte (n, L) de enteros a (n, 4, L) one-hot.
+    Al ser las bases categorías, al momento de codificarlas 0,1,2,3 le sugeriría
+    a la red que T esta más lejos de A que C, lo cual es biológicamente falso."""
+    n, L = X_int.shape
+    out = np.zeros((n, 4, L), dtype=np.float32)
+    for base in range(4):
+        out[:, base, :] = (X_int == base)
+    return out
+
+
+def crear_dataset_cnn(genoma_ref, window_size, n_samples):
+    """Ventanas aleatorias del genoma, etiquetadas por su contenido GC."""
+    seq_num = codificar_secuencia(genoma_ref)
+    rng = np.random.default_rng(SEED)
+    max_start = len(seq_num) - window_size
+
+    X, y = [], []
+    for _ in range(n_samples):
+        i = int(rng.integers(0, max_start))
+        v = seq_num[i:i + window_size]
+        # Con BASE_MAP {A:0, C:1, G:2, T:3}, las bases G y C son los códigos 1 y 2.
+        gc = float(np.mean((v == 1) | (v == 2)))
+        X.append(v)
+        y.append(1 if gc > 0.55 else 0)
+
+    return np.array(X, dtype=np.int64), np.array(y, dtype=np.int64)
+
+
+def actividad_cnn(genoma_ref, outdir, epochs, n_samples, window=64):
+    print("\n[e] Búsqueda jerárquica con CNN 1D")
+
+    figdir = os.path.join(outdir, "Figures")
+    os.makedirs(figdir, exist_ok=True)
+    torch.manual_seed(SEED)
+
+    X, y = crear_dataset_cnn(genoma_ref, window, n_samples)
+    n0, n1 = int((y == 0).sum()), int((y == 1).sum())
+    print(f" Clase 0 (GC bajo) : {n0}")
+    print(f" Clase 1 (GC alto) : {n1}")
+
+    rng = np.random.default_rng(SEED)
+    idx = rng.permutation(len(X))
+    ntr = int(0.8 * len(X))
+    itr, ite = idx[:ntr], idx[ntr:]
+
+    Xtr = torch.tensor(one_hot(X[itr])); ytr = torch.tensor(y[itr])
+    Xte = torch.tensor(one_hot(X[ite])); yte = torch.tensor(y[ite])
+
+    # Linea base, accuracy, solo para predecir siempre la clase mayoritaria.
+    # Todo modelo debe superarla; si la iguala, no se aprendió nada.
+    baseline = max((yte == 0).float().mean().item(),
+                   (yte == 1).float().mean().item())
+    print(f" Linea base, solo de referencia (clase mayoritaria): {baseline:.4f}")
+
+    model = CNN1D()
+
+    # Pesos de clase, compensan el desbalance. accuracy = linea base, F1 = 0.
+    peso1 = (ytr == 0).sum().item() / max((ytr == 1).sum().item(), 1)
+    pesos = torch.tensor([1.0, peso1], dtype=torch.float32)
+    clase_mayoritaria = 0 if n0 > n1 else 1
+    print(f" Clase mayoritaria: {clase_mayoritaria}")
+    print(f" Peso aplicado a la clase 1: {peso1:.3f})")
+
+    criterion = nn.CrossEntropyLoss(weight=pesos)
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+
+    for ep in range(epochs):
+        model.train()
+        optimizer.zero_grad()
+        loss = criterion(model(Xtr), ytr)
+        loss.backward()
+        optimizer.step()
+
+    model.eval()
+    with torch.no_grad():
+        pred = model(Xte).argmax(1)
+
+    vp = int(((pred == 1) & (yte == 1)).sum())
+    fp = int(((pred == 1) & (yte == 0)).sum())
+    fn = int(((pred == 0) & (yte == 1)).sum())
+    vn = int(((pred == 0) & (yte == 0)).sum())
+
+    prec = vp / (vp + fp) if (vp + fp) else 0.0
+    rec  = vp / (vp + fn) if (vp + fn) else 0.0
+    f1   = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    acc  = (vp + vn) / len(yte)
+    nclases = int(len(torch.unique(pred)))
+
+    print(f" Accuracy  : {acc:.4f}   (linea base {baseline:.4f})")
+    print(f" Precision : {prec:.4f}")
+    print(f" Recall    : {rec:.4f}")
+    print(f" F1-score  : {f1:.4f}")
+    print(f" Clases distintas predichas: {nclases}")
+    print(f" Matriz: Real0=[{vn},{fp}]  Real1=[{fn},{vp}]")
+
+    pd.DataFrame([{
+        "baseline": baseline, "accuracy": acc, "precision": prec, "recall": rec,
+        "f1_score": f1, "true_neg": vn, "false_pos": fp, "false_neg": fn,
+        "true_pos": vp, "n_classes_predicted": nclases, "epochs": epochs,
+        "n_samples": n_samples, "window_size": window,
+        "class_0": n0, "class_1": n1, "minority_weight": peso1,
+    }]).to_csv(os.path.join(outdir, "cnn_results.csv"), index=False)
+
+    # Visualizacion de los filtros.
+    filtros = model.conv1.weight.detach().numpy()
+    fig, axes = plt.subplots(2, 4, figsize=(14, 5))
+    for k, ax in enumerate(axes.flat):
+        ax.imshow(filtros[k], cmap="RdBu_r", aspect="auto",
+                  vmin=-abs(filtros).max(), vmax=abs(filtros).max())
+        ax.set_title(f"Filtro {k}", fontsize=9)
+        ax.set_yticks(range(4))
+        ax.set_yticklabels(["A", "C", "G", "T"], fontsize=8)
+        ax.set_xlabel("Posicion", fontsize=8)
+    fig.suptitle("Filtros aprendidos por la CNN 1D (rojo = peso +, azul = peso -)")
+    plt.tight_layout()
+    ruta = os.path.join(figdir, "cnn_filters_or_activations.png")
+    plt.savefig(ruta, dpi=150)
+    plt.close()
+    print(f"  {ruta}")
+
+
 def main():
     p = argparse.ArgumentParser(description="Problema 1 con PySpark")
     p.add_argument("--reference",  required=True)
@@ -351,6 +495,8 @@ def main():
                    help="lista separada por comas, por ejemplo  1,2,4,8,16")
     p.add_argument("--repeats", type=int, default=3,
                    help="repeticiones por configuración, para promediar")
+    p.add_argument("--cnn_epochs",  type=int, default=300)
+    p.add_argument("--cnn_samples", type=int, default=5000)
     args = p.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -365,16 +511,16 @@ def main():
     print("Spark version :", spark.version)
 
     genoma_ref = leer_fasta_completo(args.reference)
-    print("Genoma        :", len(genoma_ref), "bases")
+    print("Genoma :", len(genoma_ref), "bases")
 
     reads = leer_fasta_reads(args.query, args.n_reads)
-    print("Reads leidos  :", len(reads))
+    print("Reads leidos :", len(reads))
 
     patrones = generar_patrones(reads, os.path.basename(args.query))
-    print("Patrones      :", len(patrones))
+    print("Patrones :", len(patrones))
 
     # broadcast,  envía el genoma una vez a cada worker.
-    # Sin esto Spark serializaria los aprox 3 MB en cada una de las 360 tareas.
+    # Sin esto Spark serializaría los aprox 3 MB en cada una de las 360 tareas.
     bc_ref = sc.broadcast(genoma_ref)
 
     actividad_regex(sc, patrones, bc_ref, args.partitions, args.outdir)
@@ -384,6 +530,7 @@ def main():
     
     actividad_recurrencia(genoma_ref, reads, args.outdir)
     actividad_codificacion_conv(genoma_ref, args.outdir)
+    actividad_cnn(genoma_ref, args.outdir, args.cnn_epochs, args.cnn_samples)
 
     spark.stop()
     print("\nListo.")
