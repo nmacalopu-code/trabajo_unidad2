@@ -16,6 +16,7 @@ from pyspark.sql import SparkSession
 SEED = 42
 LARGOS = [4, 8, 12, 16, 24, 32]
 BASE_MAP = {"A": 0, "C": 1, "G": 2, "T": 3}
+K = 4   # largo del k-mero: 4^4 = 256 valores
 
 def leer_fasta_completo(path):
     """Lee un fasta  y devuelve una cadena con toda la secuencia."""
@@ -246,17 +247,98 @@ def actividad_recurrencia(genoma_ref, reads, outdir, n_bases=500):
     plt.savefig(ruta, dpi=150)
     plt.close()
 
-    # Densidad: fracción de celdas en True. Con 4 bases equiprobables el azar
+    # La densidad es la fracción de celdas en True. Con 4 bases equiprobables el azar
     # da 1/4 = 0.25. Comparar con ese valor  nos diría si hay hay estructura real.
     dens_auto = float(R_auto.mean())
     dens_cross = float(R_cross.mean())
 
-    print(f" Densidad autosimilaridad : {dens_auto:.4f}")
-    print(f" Densidad cruzada         : {dens_cross:.4f}")
-    print(f" Densidad esperada al azar: 0.2500 (1/4)")
+    print(f" Densidad autosimilaridad: {dens_auto:.4f}")
+    print(f" Densidad cruzada : {dens_cross:.4f}")
+    print(f" Densidad esperada al azar: 0.2500")
     print(f" {ruta}")
 
     return dens_auto, dens_cross
+
+def codificar_4mer(kmer):
+    """Lo que hace es agrupar 4 bases en un  entero de 8 bits.
+    4 bases x 2 bits = 8 bits = 0..255."""
+    valor = 0
+    for b in kmer:
+        valor = valor * 4 + BASE_MAP[b]
+    return valor
+
+
+def codificar_kmers(seq):
+    """Esto devuelve posición, k-mero y código construidos.
+    Los tres juntos con el fin de que  si un genoma trae bases ambiguas (N), esos
+    k-meros se descartan. Si se reconstruyeran las posiciones aparte, quedarian
+    corridas respecto de los códigos y el CSV indicaría que tiene un código que no le corresponde.
+    """
+    seq = seq.upper()
+    posiciones, kmers, codigos = [], [], []
+
+    for i in range(len(seq) - K + 1):
+        kmer = seq[i:i + K]
+        if all(b in BASE_MAP for b in kmer):
+            posiciones.append(i)
+            kmers.append(kmer)
+            codigos.append(codificar_4mer(kmer))
+
+    return posiciones, kmers, np.array(codigos, dtype=np.uint8)
+
+
+def actividad_codificacion_conv(genoma_ref, outdir, n_bases=2000):
+    print("\n[d] Codificación 8-bit y convolucion 1D")
+
+    figdir = os.path.join(outdir, "Figures")
+    os.makedirs(figdir, exist_ok=True)
+
+    posiciones, kmers, serie = codificar_kmers(genoma_ref[:n_bases])
+
+    df_enc = pd.DataFrame({
+        "position": posiciones,
+        "kmer": kmers,
+        "code_8bit": serie.astype(int),
+    })
+    df_enc.to_csv(os.path.join(outdir, "encoded_sequences.csv"), index=False)
+
+    print(f" Códigos generados : {len(serie)}")
+    print(f" Rango             : {serie.min()} .. {serie.max()}")
+    print(f" Códigos distintos : {len(np.unique(serie))} de 256 posibles")
+
+    # Kernel alternante, esto por si códigos vecinos se alternan,
+    # y cerca de 0 cuando la señal es plana, funciona como un detector de cambio.
+    kernel = np.array([1, -1, 1, -1], dtype=float)
+    conv = np.convolve(serie.astype(float), kernel, mode="valid")
+
+    df_conv = pd.DataFrame({"index": np.arange(len(conv)), "conv_value": conv})
+    df_conv.to_csv(os.path.join(outdir, "conv1d_timeseries.csv"), index=False)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7))
+
+    ax1.plot(serie[:300], linewidth=1)
+    ax1.set_title("Serie codificada en 8 bits (k-meros de largo 4)")
+    ax1.set_xlabel("Posición en el genoma")
+    ax1.set_ylabel("Codigo (0-255)")
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(conv[:300], linewidth=1, color="darkorange")
+    ax2.axhline(0, color="gray", linestyle=":", alpha=0.7)
+    ax2.set_title("Serie de tiempo tras convolución 1D con kernel [1,-1,1,-1]")
+    ax2.set_xlabel("Posición en el genoma")
+    ax2.set_ylabel("Respuesta de la convolución")
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    ruta = os.path.join(figdir, "conv1d_signal.png")
+    plt.savefig(ruta, dpi=150)
+    plt.close()
+
+    print(f" Convolucion: media={conv.mean():.2f}  std={conv.std():.2f}")
+    print(f" {ruta}")
+
+    return df_enc, df_conv
+
 
 def main():
     p = argparse.ArgumentParser(description="Problema 1 con PySpark")
@@ -301,7 +383,7 @@ def main():
     actividad_benchmark(sc, patrones, bc_ref, lista_particiones, args.repeats, args.outdir)
     
     actividad_recurrencia(genoma_ref, reads, args.outdir)
-
+    actividad_codificacion_conv(genoma_ref, args.outdir)
 
     spark.stop()
     print("\nListo.")
