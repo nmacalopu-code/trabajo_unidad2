@@ -7,7 +7,7 @@ import re
 import time
 
 import matplotlib
-matplotlib.use("Agg")   # backend sin ventana: obligatorio dentro de un pipeline
+matplotlib.use("Agg")   
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -15,10 +15,10 @@ from pyspark.sql import SparkSession
 
 SEED = 42
 LARGOS = [4, 8, 12, 16, 24, 32]
-
+BASE_MAP = {"A": 0, "C": 1, "G": 2, "T": 3}
 
 def leer_fasta_completo(path):
-    """Lee un FASTA y devuelve UNA cadena con toda la secuencia."""
+    """Lee un fasta  y devuelve una cadena con toda la secuencia."""
     partes = []
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         for linea in f:
@@ -29,9 +29,7 @@ def leer_fasta_completo(path):
 
 
 def leer_fasta_reads(path, n_reads):
-    """Lee unicamente los primeros n_reads del archivo y corta ahi.
-    El query tiene 725.228 reads (aprox 114 MB) y solo necesito 20: no tiene
-    sentido cargarlo entero en memoria."""
+    """Lee solo  los primeros n_reads del archivo y se detiene ahí"""
     reads = []
     id_actual = None
     partes = []
@@ -59,7 +57,7 @@ def leer_fasta_reads(path, n_reads):
 
 
 def generar_patrones(reads, archivo_query):
-    """De cada read extrae 6 largos x 3 posiciones (inicio, centro, final)."""
+    """De cada read extrae 6 largos por  3 posiciones (inicio, centro, final)."""
     patrones = []
     for id_seq, seq in reads:
         for L in LARGOS:
@@ -82,10 +80,10 @@ def generar_patrones(reads, archivo_query):
 
 
 def buscar_patron(row, referencia):
-    """Busca UN patron en el genoma. Corre dentro de cada worker de Spark."""
+    """Busca un  patrón en el genoma, corre dentro de cada worker de Spark."""
     t0 = time.perf_counter()
 
-    # El lookahead (?=(...)) cuenta ocurrencias SOLAPADAS.
+    # El lookahead (?=(...)) cuenta ocurrencias, como que haya solapaciones.
     # En "AAAA", buscar "AA" da 2 sin lookahead, pero 3 con lookahead.
     regex = f"(?=({re.escape(row['pattern'])}))"
     posiciones = [m.start() for m in re.finditer(regex, referencia)]
@@ -119,11 +117,11 @@ def actividad_regex(sc, patrones, bc_ref, particiones, outdir):
     ruta = os.path.join(outdir, "regex_matches.csv")
     df.to_csv(ruta, index=False)
 
-    print(f"    Patrones evaluados : {len(df)}")
-    print(f"    Calces totales     : {int(df['match_count'].sum())}")
-    print(f"    Patrones con calce : {int(df['match_found'].sum())}")
-    print(f"    Tiempo total       : {t1 - t0:.2f} s")
-    print(f"    -> {ruta}")
+    print(f" Patrones evaluados : {len(df)}")
+    print(f" Calces totales     : {int(df['match_count'].sum())}")
+    print(f" Patrones con calce : {int(df['match_found'].sum())}")
+    print(f" Tiempo total       : {t1 - t0:.2f} s")
+    print(f" {ruta}")
 
     return df
 
@@ -165,9 +163,9 @@ def actividad_benchmark(sc, patrones, bc_ref, lista_particiones, repeticiones, o
     ruta = os.path.join(outdir, "benchmark_parallelization.csv")
     df.to_csv(ruta, index=False)
 
-    # Prueba de correctitud: si paralelizar cambiara el resultado, seria un bug.
+    # Prueba de corrección, es decir si paralelizar cambiara el resultado, seria un bug.
     identicos = df["total_matches"].nunique() == 1
-    print(f"    Calces identicos en todas las configuraciones: {identicos}")
+    print(f"    Calces idénticos en todas las configuraciones: {identicos}")
 
     mejor = df.loc[df["speedup"].idxmax()]
     print(f"    Mejor speedup: {mejor['speedup']:.2f}x con {int(mejor['partitions'])} particiones")
@@ -186,7 +184,7 @@ def graficar_benchmark(df, outdir):
                  marker="o", capsize=4, linewidth=2)
     ax1.set_xlabel("Numero de particiones")
     ax1.set_ylabel("Tiempo de ejecucion [s]")
-    ax1.set_title("Tiempo segun numero de particiones")
+    ax1.set_title("Tiempo según número de particiones")
     ax1.grid(True, alpha=0.3)
 
     ax2.plot(df["partitions"], df["speedup"], marker="o", linewidth=2,
@@ -195,9 +193,9 @@ def graficar_benchmark(df, outdir):
              label="Speedup ideal (lineal)")
     ax2.axhline(1.0, color="gray", linestyle=":", alpha=0.7,
                 label="Sin ganancia (1x)")
-    ax2.set_xlabel("Numero de particiones")
+    ax2.set_xlabel("Número de particiones")
     ax2.set_ylabel("Speedup")
-    ax2.set_title("Speedup relativo a la ejecucion base")
+    ax2.set_title("Speedup relativo a la ejecución base")
     ax2.legend()
     ax2.grid(True, alpha=0.3)
 
@@ -205,8 +203,60 @@ def graficar_benchmark(df, outdir):
     ruta = os.path.join(figdir, "benchmark_parallelization.png")
     plt.savefig(ruta, dpi=150)
     plt.close()
-    print(f"    -> {ruta}")
+    print(f"  {ruta}")
 
+
+def codificar_secuencia(seq):
+    """Convierte bases en números, se descantan bases ambiguas (N)."""
+    return np.array([BASE_MAP[b] for b in seq.upper() if b in BASE_MAP],
+                    dtype=np.int8)
+
+
+def actividad_recurrencia(genoma_ref, reads, outdir, n_bases=500):
+    print("\n[c] Gráficos de recurrencia")
+
+    figdir = os.path.join(outdir, "Figures")
+    os.makedirs(figdir, exist_ok=True)
+
+    # Autosimilaridad, es decir la referencia consigo misma.
+    # R[i,j] = True si la base i es igual a la base j.
+    frag_ref = codificar_secuencia(genoma_ref[:n_bases])
+    R_auto = (frag_ref.reshape(-1, 1) == frag_ref.reshape(1, -1))
+
+    # Recurrencia cruzada: un read contra la referencia.
+    id_read, seq_read = reads[0]
+    frag_read = codificar_secuencia(seq_read[:min(len(seq_read), n_bases)])
+    R_cross = (frag_read.reshape(-1, 1) == frag_ref.reshape(1, -1))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
+
+    ax1.imshow(R_auto, cmap="binary", origin="lower", interpolation="nearest")
+    ax1.set_title(f"Autosimilaridad: genoma de referencia\n(primeras {n_bases} bases)")
+    ax1.set_xlabel("Posición en la referencia")
+    ax1.set_ylabel("Posición en la referencia")
+
+    ax2.imshow(R_cross, cmap="binary", origin="lower", aspect="auto",
+               interpolation="nearest")
+    ax2.set_title("Recurrencia cruzada: read vs referencia")
+    ax2.set_xlabel("Posición en la referencia")
+    ax2.set_ylabel("Posición en el read")
+
+    plt.tight_layout()
+    ruta = os.path.join(figdir, "recurrence_plot.png")
+    plt.savefig(ruta, dpi=150)
+    plt.close()
+
+    # Densidad: fracción de celdas en True. Con 4 bases equiprobables el azar
+    # da 1/4 = 0.25. Comparar con ese valor  nos diría si hay hay estructura real.
+    dens_auto = float(R_auto.mean())
+    dens_cross = float(R_cross.mean())
+
+    print(f" Densidad autosimilaridad : {dens_auto:.4f}")
+    print(f" Densidad cruzada         : {dens_cross:.4f}")
+    print(f" Densidad esperada al azar: 0.2500 (1/4)")
+    print(f" {ruta}")
+
+    return dens_auto, dens_cross
 
 def main():
     p = argparse.ArgumentParser(description="Problema 1 con PySpark")
@@ -216,7 +266,7 @@ def main():
     p.add_argument("--partitions", type=int, default=4)
     p.add_argument("--n_reads",    type=int, default=20)
     p.add_argument("--benchmark_partitions", default="1,2,4,8,16",
-                   help="lista separada por comas, ej: 1,2,4,8,16")
+                   help="lista separada por comas, por ejemplo  1,2,4,8,16")
     p.add_argument("--repeats", type=int, default=3,
                    help="repeticiones por configuración, para promediar")
     args = p.parse_args()
@@ -241,14 +291,17 @@ def main():
     patrones = generar_patrones(reads, os.path.basename(args.query))
     print("Patrones      :", len(patrones))
 
-    # broadcast: envia el genoma UNA vez a cada worker.
-    # Sin esto Spark serializaria los ~3 MB en CADA una de las 360 tareas.
+    # broadcast,  envía el genoma una vez a cada worker.
+    # Sin esto Spark serializaria los aprox 3 MB en cada una de las 360 tareas.
     bc_ref = sc.broadcast(genoma_ref)
 
     actividad_regex(sc, patrones, bc_ref, args.partitions, args.outdir)
 
     lista_particiones = [int(x) for x in args.benchmark_partitions.split(",")]
     actividad_benchmark(sc, patrones, bc_ref, lista_particiones, args.repeats, args.outdir)
+    
+    actividad_recurrencia(genoma_ref, reads, args.outdir)
+
 
     spark.stop()
     print("\nListo.")
