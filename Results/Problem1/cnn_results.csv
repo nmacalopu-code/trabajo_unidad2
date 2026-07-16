@@ -1,0 +1,2 @@
+baseline,accuracy,precision,recall,f1_score,true_neg,false_pos,false_neg,true_pos,n_classes_predicted,epochs,n_samples,window_size,class_0,class_1,minority_weight
+0.6779999732971191,0.952,0.9801829268292683,0.948377581120944,0.9640179910044979,309,13,35,643,2,300,5000,64,1565,3435,0.4508523757707653

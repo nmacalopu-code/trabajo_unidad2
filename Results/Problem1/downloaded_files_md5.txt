@@ -1,0 +1,2 @@
+df7f23a29ec04314c3c8862b81ce8063  Data/Genoma_referencia.fasta
+591b1d957c39e9d1d09513eab08167fe  Data/Secuenciacion4_correctedshortReads.fasta
