@@ -1,4 +1,4 @@
-.#!/usr/bin/env bash
+#!/usr/bin/env bash
 # calculo_bash.sh  para proceso 2 adaptado de calculoBashTask
 # David A. Castro S., repositorio tap_pipeline_gen original
 # Adaptacion: sin rutas absolutas /home/dabits/, parametrizado por argumentos,
@@ -14,7 +14,11 @@ archivo_referencia="$1"
 archivo_query="$2"
 archivo_csv="$3"
 n_reads="${4:-20}"
-largo_semilla="${5:-20}"
+largo_semilla="${5:-16}" 
+#se consideró una semilla de 16 por que en un genoma de aproximadamente 3M bases, el número esperado de
+# apariciones por azar (G/4^L) es 0.0007, asi que una coincidencia es casi con certeza
+# real y no ruido. Por debajo de 12 la semilla aparece por azar (con 10, el
+# valor del config original, se esperan aproximadamente 2.8 apariciones aleatorias).
 
 # Cronómetro robusto en ms. date +%s%3N falla en algunos WSL (19 digitos salían restas negativas # muy grandes). date +%s.%N pasado a ms con awk es estable.
 get_time_ms() { date +%s.%N | awk '{ printf "%.0f", $1 * 1000 }'; }
