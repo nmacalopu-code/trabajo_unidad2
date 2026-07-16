@@ -33,15 +33,15 @@ process DOWNLOAD_FIGSHARE {
         nombre=\$(echo "\$linea" | cut -f2)
         md5_esperado=\$(echo "\$linea" | cut -f3)
 
-        echo ">>> Descargando \$nombre"
+        echo "Descargando \$nombre"
         curl -sL "\$url" -o "Data/\$nombre"
 
         md5_real=\$(md5sum "Data/\$nombre" | cut -d' ' -f1)
 
         if [ "\$md5_real" != "\$md5_esperado" ]; then
             echo "Error: MD5 no coincide para \$nombre"
-            echo "  esperado: \$md5_esperado"
-            echo "  obtenido: \$md5_real"
+            echo "Esperado: \$md5_esperado"
+            echo "Obtenido: \$md5_real"
             exit 1
         fi
         echo "    MD5 verificado OK"
@@ -52,10 +52,41 @@ process DOWNLOAD_FIGSHARE {
     """
 }
 
+process RUN_PROBLEM1_PYSPARK {
+
+    tag "problem1"
+
+    publishDir "${params.outdir}", mode: 'copy'
+
+    input:
+    path pipeline_script
+    path fastas
+
+    output:
+    path "Problem1/*.csv",         emit: tablas
+    path "Problem1/Figures/*.png", emit: figuras
+
+    script:
+    """
+    mkdir -p Problem1/Figures
+
+    spark-submit ${pipeline_script} \\
+        --reference ${params.reference} \\
+        --query ${params.query} \\
+        --outdir Problem1 \\
+        --partitions ${params.partitions} \\
+        --n_reads ${params.n_reads} \\
+        --benchmark_partitions ${params.benchmark_partitions} \\
+        --repeats ${params.repeats} \\
+        --cnn_epochs ${params.cnn_epochs} \\
+        --cnn_samples ${params.cnn_samples}
+    """
+}
+
 workflow {
 
     if( !params.figshare_id )
-        error "Falta --figshare_id. Ejemplo: nextflow run main.nf --figshare_id 32968955 -profile local"
+        error "Falta --figshare_id. Por ejemplo: nextflow run main.nf --figshare_id 32968955 -profile local"
 
     log.info """
     PIPELINE - Neyling Yuriko Teresa Macalopú Rimachi
@@ -69,4 +100,9 @@ workflow {
     ch_get_urls = Channel.fromPath("${projectDir}/scripts/get_figshare_urls.py")
 
     DOWNLOAD_FIGSHARE(ch_get_urls)
+
+    ch_p1_script = Channel.fromPath("${projectDir}/scripts/problem1_pyspark_pipeline.py")
+
+    RUN_PROBLEM1_PYSPARK(ch_p1_script, DOWNLOAD_FIGSHARE.out.fastas)
+
 }
