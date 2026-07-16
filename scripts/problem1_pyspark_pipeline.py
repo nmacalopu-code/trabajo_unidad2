@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Problema 1 - Análisis de secuencias biológicas con PySpark."""
+"""Problema 1: Análisis de secuencias biológicas con PySpark"""
 
 import argparse
 import os
@@ -16,6 +16,10 @@ from pyspark.sql import SparkSession
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+import platform
+import subprocess
+import sys
 
 
 SEED = 42
@@ -484,6 +488,83 @@ def actividad_cnn(genoma_ref, outdir, epochs, n_samples, window=64):
     print(f"  {ruta}")
 
 
+def version_de(pkg):
+    """Pregunta la versión instalada de un paquete"""
+    try:
+        import importlib.metadata as md
+        return md.version(pkg)
+    except Exception:
+        return "No está instalado"
+
+
+def version_java():
+    try:
+        out = subprocess.run(["java", "-version"], capture_output=True,
+                             text=True, timeout=10)
+        return (out.stderr or out.stdout).splitlines()[0].split('"')[1]
+    except Exception:
+        return "Se desconoce"
+
+
+def commit_git():
+    """Registra el commit exacto que produjo estos resultados.
+    Si hay cambios sin guardar o confirmar, se avisará, en este caso los resultados
+    no se podrían reproducir desde el repositorio."""
+    try:
+        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=10)
+        sucio = subprocess.run(["git", "status", "--porcelain"],
+                               capture_output=True, text=True, timeout=10)
+        c = h.stdout.strip() or "Sin guardar"
+        return c + (" (Con cambios sin guardar)" if sucio.stdout.strip()
+                    else " (árbol limpio)")
+    except Exception:
+        return "No es repositorio git"
+
+
+def escribir_run_parameters(spark, args, genoma_ref, df_bench, outdir):
+    print("\n[f] Registro de parámetros y entorno")
+
+    mejor = df_bench.loc[df_bench["speedup"].idxmax()]
+
+    filas = [
+        ("fecha_ejecucion",       pd.Timestamp.now().isoformat(timespec="seconds")),
+        ("sistema_operativo",     platform.platform()),
+        ("python_version",        sys.version.split()[0]),
+        ("java_version",          version_java()),
+        ("spark_version",         spark.version),
+        ("pyspark_version",       version_de("pyspark")),
+        ("torch_version",         version_de("torch")),
+        ("numpy_version",         version_de("numpy")),
+        ("pandas_version",        version_de("pandas")),
+        ("matplotlib_version",    version_de("matplotlib")),
+        ("git_commit",            commit_git()),
+        ("cpus_logicos",          os.cpu_count()),
+        ("seed",                  SEED),
+        ("archivo_referencia",    os.path.basename(args.reference)),
+        ("archivo_query",         os.path.basename(args.query)),
+        ("largo_genoma_bases",    len(genoma_ref)),
+        ("n_reads",               args.n_reads),
+        ("largos_patron",         ",".join(str(x) for x in LARGOS)),
+        ("k_mer",                 K),
+        ("particiones",           args.partitions),
+        ("benchmark_particiones", args.benchmark_partitions),
+        ("repeticiones",          args.repeats),
+        ("mejor_speedup",         round(float(mejor["speedup"]), 3)),
+        ("mejor_n_particiones",   int(mejor["partitions"])),
+        ("cnn_epochs",            args.cnn_epochs),
+        ("cnn_samples",           args.cnn_samples),
+    ]
+
+    df = pd.DataFrame(filas, columns=["parametro", "valor"])
+    ruta = os.path.join(outdir, "run_parameters.csv")
+    df.to_csv(ruta, index=False)
+
+    print(f"  {len(df)} Parámetros registrados automáticamente")
+    print(f"  {ruta}")
+    return df
+
+
 def main():
     p = argparse.ArgumentParser(description="Problema 1 con PySpark")
     p.add_argument("--reference",  required=True)
@@ -519,18 +600,22 @@ def main():
     patrones = generar_patrones(reads, os.path.basename(args.query))
     print("Patrones :", len(patrones))
 
-    # broadcast,  envía el genoma una vez a cada worker.
-    # Sin esto Spark serializaría los aprox 3 MB en cada una de las 360 tareas.
+    # Broadcast, se encarga de enviar el genoma una vez a cada worker.
+    # si no se considera broadcast, spark serializaría 
+    # es decir, los aprox 3 MB (que pesan algunos archivos) en cada una de las 360 tareas.
     bc_ref = sc.broadcast(genoma_ref)
 
     actividad_regex(sc, patrones, bc_ref, args.partitions, args.outdir)
 
     lista_particiones = [int(x) for x in args.benchmark_partitions.split(",")]
-    actividad_benchmark(sc, patrones, bc_ref, lista_particiones, args.repeats, args.outdir)
-    
+
+    df_bench = actividad_benchmark(sc, patrones, bc_ref, lista_particiones, args.repeats, args.outdir)
+
     actividad_recurrencia(genoma_ref, reads, args.outdir)
     actividad_codificacion_conv(genoma_ref, args.outdir)
     actividad_cnn(genoma_ref, args.outdir, args.cnn_epochs, args.cnn_samples)
+
+    escribir_run_parameters(spark, args, genoma_ref, df_bench, args.outdir)
 
     spark.stop()
     print("\nListo.")
