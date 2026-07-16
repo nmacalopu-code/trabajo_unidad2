@@ -83,6 +83,32 @@ process RUN_PROBLEM1_PYSPARK {
     """
 }
 
+process CALCULO_BASH {
+
+    tag "calculo_bash"
+
+    publishDir "${params.outdir}", mode: 'copy'
+
+    input:
+    path bash_script
+    path fastas
+
+    output:
+    path "External/*.csv", emit: resultados
+
+    script:
+    """
+    mkdir -p External
+
+    bash ${bash_script} \\
+        ${params.reference} \\
+        ${params.query} \\
+        External/calculo_bash_resultados.csv \\
+        ${params.n_reads} \\
+        ${params.semilla}
+    """
+}
+
 workflow {
 
     if( !params.figshare_id )
@@ -105,4 +131,7 @@ workflow {
 
     RUN_PROBLEM1_PYSPARK(ch_p1_script, DOWNLOAD_FIGSHARE.out.fastas)
 
+    ch_bash_script = Channel.fromPath("${projectDir}/scripts/calculo_bash.sh")
+
+    CALCULO_BASH(ch_bash_script, DOWNLOAD_FIGSHARE.out.fastas)
 }
