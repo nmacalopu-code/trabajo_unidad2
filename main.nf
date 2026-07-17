@@ -109,6 +109,28 @@ process CALCULO_BASH {
     """
 }
 
+process GENERA_REPORTE {
+
+    tag "reporte_bash"
+
+    publishDir "${params.outdir}", mode: 'copy'
+
+    input:
+    path reporte_script
+    path csv_bash
+
+    output:
+    path "External/reporte_bash.html", emit: html
+    path "External/Figures/reporte_bash.png", emit: figura
+
+    script:
+    """
+    mkdir -p External/Figures
+
+    python3 ${reporte_script} ${csv_bash} External
+    """
+}
+
 workflow {
 
     if( !params.figshare_id )
@@ -134,4 +156,8 @@ workflow {
     ch_bash_script = Channel.fromPath("${projectDir}/scripts/calculo_bash.sh")
 
     CALCULO_BASH(ch_bash_script, DOWNLOAD_FIGSHARE.out.fastas)
+
+    ch_reporte_script = Channel.fromPath("${projectDir}/scripts/genera_reporte.py")
+
+    GENERA_REPORTE(ch_reporte_script, CALCULO_BASH.out.resultados)
 }
