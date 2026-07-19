@@ -45,8 +45,6 @@ Este es el **entorno exacto** con el que se desarrolló y verificó el pipeline:
 | NumPy | `2.5.1` |
 | pandas | `3.0.3` |
 | matplotlib | `3.11.0` |
-| SciPy | `no instalado` |
-| requests | `no instalado` |
 
 > **Sobre la versión de Java.** El pipeline se probó únicamente con **Java 17**.
 > Spark 4.x admite oficialmente Java 17 y 21, pero aquí no se verificó con 21.
@@ -64,25 +62,31 @@ Este es el **entorno exacto** con el que se desarrolló y verificó el pipeline:
 > de `Results/Problem1/run_parameters.csv`, junto con el commit de git. No se
 > transcriben a mano.
 
-## 3. Instalación
+## 3.Instalación
 
 ```bash
 git clone https://github.com/nmacalopu-code/trabajo_unidad2.git
 cd trabajo_unidad2
-
-# Opción A — conda
-conda env create -f env/environment.yml
-conda activate tap_unidad2
-
-# Opción B — venv
-python3 -m venv .venv
-source .venv/bin/activate
-pip install pyspark torch pandas numpy matplotlib scipy requests
 ```
 
-Los datos los baja el pipeline.
+**Opción A — venv.** Es el entorno con el que se desarrolló y
+ejecutó el pipeline:
 
----
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r env/requirements.txt
+```
+
+**Opción B — conda (alternativa por si se desea utilizar con esta opcion).** `env/environment.yml` replica las mismas versiones, pero esa ruta no fue ejecutada:
+
+```bash
+conda env create -f env/environment.yml
+conda activate tap_unidad2
+```
+
+Las versiones de `env/requirements.txt` se generaron desde el entorno real de
+ejecución. No hay que descargar datos: los baja el pipeline.
 
 ## 4. Ejecución
 

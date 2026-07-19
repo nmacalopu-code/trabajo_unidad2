@@ -2,12 +2,16 @@ name: tap_unidad2
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
+  - python=3.14
   - openjdk=17
-  - pyspark
-  - pandas
-  - numpy
-  - matplotlib
-  - scipy
-  - requests
+  - pyspark=4.1.2
+  - numpy=2.5.1
+  - pandas=3.0.3
+  - matplotlib=3.11.0
   - pip
+  - pip:
+    - --extra-index-url https://download.pytorch.org/whl/cpu
+    - torch==2.13.0+cpu
+
+# NOTA: el pipeline se desarrollo y verifico con venv + env/requirements.txt.
+# Este archivo replica esas versiones para quien prefiera conda.

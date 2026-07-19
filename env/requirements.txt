@@ -1,0 +1,15 @@
+# Entorno verificado del pipeline 
+# Generado desde el entorno real de ejecución.
+# Requiere Python 3.14.4 y OpenJDK 17.
+#
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r env/requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+pyspark==4.1.2
+torch==2.13.0+cpu
+numpy==2.5.1
+pandas==3.0.3
+matplotlib==3.11.0
