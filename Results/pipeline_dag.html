@@ -37,34 +37,41 @@ flowchart TB
     subgraph " "
     v0["channel.fromPath"]
     v4["channel.fromPath"]
-    v8["channel.fromPath"]
-    v10["channel.fromPath"]
+    v7["channel.fromPath"]
+    v9["channel.fromPath"]
+    v13["channel.fromPath"]
     end
     v1(["DOWNLOAD_FIGSHARE"])
     subgraph " "
     v2[" "]
     v3[" "]
     v6[" "]
-    v7[" "]
+    v11[" "]
     v12[" "]
-    v13[" "]
+    v15[" "]
+    v16[" "]
     end
     v5(["RUN_PROBLEM1_PYSPARK"])
-    v9(["CALCULO_BASH"])
-    v11(["GENERA_REPORTE"])
+    v8(["CALCULO_BASH"])
+    v10(["GENERA_REPORTE"])
+    v14(["FINAL_REPORT"])
     v0 --> v1
     v1 --> v5
     v1 --> v3
     v1 --> v2
-    v1 --> v9
+    v1 --> v8
     v4 --> v5
-    v5 --> v7
+    v5 --> v14
     v5 --> v6
-    v8 --> v9
-    v9 --> v11
+    v7 --> v8
+    v8 --> v10
+    v8 --> v14
+    v9 --> v10
+    v10 --> v12
     v10 --> v11
-    v11 --> v13
-    v11 --> v12
+    v13 --> v14
+    v14 --> v16
+    v14 --> v15
 
 </pre>
 <script type="module">
