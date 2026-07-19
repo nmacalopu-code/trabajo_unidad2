@@ -31,16 +31,28 @@ cálculo Bash. La topología completa está en `Results/pipeline_dag.html`.
 
 ## 2. Requisitos
 
-| Componente | Versión |
-|---|---|
-| Sistema | Linux o Windows + WSL (Ubuntu) |
-| **Java** | **17** |
-| Nextflow | 25.x o superior |
-| Python | 3.10+ |
-| Paquetes | `pyspark`, `torch`, `pandas`, `numpy`, `matplotlib`, `scipy`, `requests` |
+Este es el **entorno exacto** con el que se desarrolló y verificó el pipeline:
 
-> **Java 17.** Spark 4.x no soporta oficialmente Java 25 y falla en
-> tiempo de ejecución, no al arrancar. Si `java -version` reporta otra cosa:
+| Componente | Versión utilizada |
+|---|---|
+| Sistema operativo | `Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43` |
+| Java (OpenJDK) | `17.0.19` |
+| Nextflow | `26.04.4.12445` |
+| Git | `2.53.0` |
+| Python | `3.14.4` |
+| PySpark | `4.1.2` |
+| PyTorch | `2.13.0+cpu` |
+| NumPy | `2.5.1` |
+| pandas | `3.0.3` |
+| matplotlib | `3.11.0` |
+| SciPy | `no instalado` |
+| requests | `no instalado` |
+
+> **Sobre la versión de Java.** El pipeline se probó únicamente con **Java 17**.
+> Spark 4.x admite oficialmente Java 17 y 21, pero aquí no se verificó con 21.
+> Con **Java 25 no funciona**: el fallo ocurre en tiempo de ejecución, no al
+> arrancar, de modo que el error aparece a mitad del análisis. Si `java -version`
+> reporta otra versión:
 >
 > ```bash
 > sudo apt install openjdk-17-jdk
@@ -48,7 +60,9 @@ cálculo Bash. La topología completa está en `Results/pipeline_dag.html`.
 > export PATH="$JAVA_HOME/bin:$PATH"
 > ```
 
----
+> Las versiones de esta tabla se registran automáticamente en cada corrida dentro
+> de `Results/Problem1/run_parameters.csv`, junto con el commit de git. No se
+> transcriben a mano.
 
 ## 3. Instalación
 
