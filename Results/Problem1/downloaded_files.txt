@@ -1,3 +1,3 @@
 total 117M
--rw-r--r-- 1 neyling neyling 3.0M Jul 19 16:55 Genoma_referencia.fasta
--rw-r--r-- 1 neyling neyling 114M Jul 19 16:55 Secuenciacion4_correctedshortReads.fasta
+-rw-r--r-- 1 neyling neyling 3.0M Jul 19 17:06 Genoma_referencia.fasta
+-rw-r--r-- 1 neyling neyling 114M Jul 19 17:07 Secuenciacion4_correctedshortReads.fasta
