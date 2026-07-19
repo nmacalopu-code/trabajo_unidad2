@@ -113,7 +113,7 @@ process GENERA_REPORTE {
 
     tag "reporte_bash"
 
-    publishDir "${params.reports_dir}", mode: 'copy'
+    publishDir "${params.outdir}", mode: 'copy'
 
     input:
     path reporte_script
@@ -160,44 +160,4 @@ workflow {
     ch_reporte_script = Channel.fromPath("${projectDir}/scripts/genera_reporte.py")
 
     GENERA_REPORTE(ch_reporte_script, CALCULO_BASH.out.resultados)
-
-    // Proceso 3: Reporte final
-    ch_final_script = Channel.fromPath("${projectDir}/scripts/final_report.py")
-    FINAL_REPORT(ch_final_script,
-                 RUN_PROBLEM1_PYSPARK.out.tablas,
-                 CALCULO_BASH.out.resultados)
-}
-
-// FINAL_REPORT - Proceso 3
-// El reporte integra y compara los resultados de los
-// Procesos 1 (PySpark) y 2 (Bash). 
-
-process FINAL_REPORT {
-
-    tag "reporte_final"
-
-    // La figura irá al arbol de resultados,
-    // y el reporte al arbol de reportes.
-    publishDir "${params.outdir}", mode: 'copy', pattern: "Figures/*.png"
-    publishDir "${params.reports_dir}", mode: 'copy', pattern: "final_report.html"
-
-    input:
-    path report_script
-    path tablas_p1, stageAs: 'Problem1/*'
-    path csv_bash,  stageAs: 'External/*'
-
-    output:
-    path "Figures/final_summary_plot.png", emit: figura
-    path "final_report.html", emit: reporte
-
-    script:
-    """
-    mkdir -p Figures
-
-    python3 ${report_script} \\
-        --problem1_dir Problem1 \\
-        --external_dir External \\
-        --figures_dir Figures \\
-        --reports_dir .
-    """
 }
