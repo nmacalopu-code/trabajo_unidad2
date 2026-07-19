@@ -512,11 +512,17 @@ def commit_git():
     no se podrían reproducir desde el repositorio.
 
     Se excluyen Results/ y Reports/ del chequeo: los genera esta misma corrida.
-    La pregunta que interesa es si el código estaba versionado."""
+    La pregunta que interesa es si el código estaba versionado.
+
+    Se usa la sintaxis :(top,exclude) y no :!  porque el proceso se ejecuta
+    dentro del work/ de Nextflow, y git interpreta los pathspec relativos al
+    directorio actual. El modificador 'top' los coloca a la raíz del repositorio."""
     try:
         h = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                            capture_output=True, text=True, timeout=10)
-        sucio = subprocess.run(["git", "status", "--porcelain", "--", ":!Results", ":!Reports"],
+        sucio = subprocess.run(["git", "status", "--porcelain", "--",
+                               ":(top,exclude)Results",
+                               ":(top,exclude)Reports"],
                                capture_output=True, text=True, timeout=10)
         c = h.stdout.strip() or "Sin guardar"
         return c + (" (Con cambios sin guardar)" if sucio.stdout.strip()
