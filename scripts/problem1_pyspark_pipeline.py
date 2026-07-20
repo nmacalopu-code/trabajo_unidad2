@@ -266,6 +266,15 @@ def actividad_recurrencia(genoma_ref, reads, outdir, n_bases=500):
     print(f" Densidad esperada al azar: 0.2500")
     print(f" {ruta}")
 
+    # Las densidades se guardan en CSV para que el informe las lea,
+    # en vez de transcribirlas a mano desde la consola.
+    pd.DataFrame([{
+        "densidad_autosimilaridad": round(dens_auto, 4),
+        "densidad_cruzada":         round(dens_cross, 4),
+        "densidad_esperada_azar":   0.25,
+        "n_bases":                  n_bases,
+    }]).to_csv(os.path.join(outdir, "recurrence_metrics.csv"), index=False)
+
     return dens_auto, dens_cross
 
 def codificar_4mer(kmer):
