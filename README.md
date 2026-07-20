@@ -2,7 +2,7 @@
 
 Pipeline reproducible que descarga datos públicos desde Figshare, ejecuta un
 análisis de secuencias biológicas con **PySpark**, integra procesos externos
-adaptados en **Bash** y genera un reporte final todo empleando con **Nextflow**.
+adaptados en **Bash** y genera un reporte final propio, todo con **Nextflow**.
 
 **Autora:** Neyling Yuriko Teresa Macalopú Rimachi
 **Curso:** Técnicas Avanzadas de Programación (TAP) 
@@ -262,9 +262,49 @@ archivo inmanejable sin aportar información adicional. La columna
 `sequence_length` corresponde al **largo del patrón buscado**.
 
 ### Evidencias de reproducibilidad
+
+```
+Results/nextflow_report.html   # uso de recursos
+Results/trace.txt              # ejecución
+Results/timeline.html          # línea de tiempo
+Results/pipeline_dag.html      # grafo de dependencias
+Results/Problem1/downloaded_files.txt
+Results/Problem1/downloaded_files_md5.txt
+Results/Problem1/run_parameters.csv
+```
 ---
 
 ## 9. Estructura del repositorio
+
+```
+trabajo_unidad2/
+├── README.md
+├── main.nf                              # 5 procesos
+├── nextflow.config                      # parámetros y recursos
+├── scripts/
+│   ├── get_figshare_urls.py             # API de Figshare + MD5
+│   ├── problem1_pyspark_pipeline.py     # Proceso 1 (PySpark + PyTorch)
+│   ├── calculo_bash.sh                  # calculoBashTask adaptado
+│   ├── genera_reporte.py                # generaReporteTask adaptado (de R a Python)
+│   └── final_report.py                  # Proceso 3
+├── Data/                                # FASTA descargados
+├── Results/
+│   ├── Problem1/                        # CSV, TXT y Figures/
+│   ├── External/                        # datos del cálculo Bash
+│   ├── Figures/final_summary_plot.png
+│   └── nextflow_report.html, trace.txt, timeline.html, pipeline_dag.html
+├── Reports/
+│   ├── final_report.html                # Proceso 3
+│   └── External/                        # reporte Bash adaptado
+├── env/
+│   ├── environment.yml
+│   └── requirements.txt                 # entorno verificado
+├── informe/
+│   ├── informe_unidad2.qmd              # fuente del informe
+│   └── informe_unidad2.html             # informe renderizado
+├── .gitignore
+└── LICENSE
+```
 ---
 
 ## 10. Licencia
