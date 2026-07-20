@@ -2550,6 +2550,7 @@ Figura 1: Speedup real frente al ideal, y eficiencia por partición.
 </div>
 </div>
 </div>
+<p>La <a href="#fig-benchmark" class="quarto-xref">Figura 1</a> muestra lo que la tabla indica. La curva azul es el speedup real y la línea gris punteada, el speedup ideal sería, si Spark escalara perfectamente, ambas coincidirían. Sin embargo, no lo hacen, y la separación entre ellas crece con cada partición añadida. La curva naranja mide esa misma pérdida desde otro ángulo (cuánto rinde en promedio cada partición) y desciende de forma sostenida; en este sentido, las dos trayectorias quieren dar a conocer lo mismo.</p>
 <div id="interpretacion-benchmark" class="cell" data-execution_count="7">
 <div id="interpretacion-benchmark-1" class="cell-output cell-output-display cell-output-markdown">
 <p><strong>Interpretación.</strong> El mejor speedup es <strong>6.70x</strong> con 16 particiones, sobre 16 CPUs lógicas. Pero el número que importa es la <strong>eficiencia</strong>: con 16 particiones cada una rinde apenas el <strong>42%</strong> de lo que rendiría en un escalamiento perfecto.</p>

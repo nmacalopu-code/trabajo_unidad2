@@ -206,6 +206,14 @@ plt.tight_layout()
 plt.show()
 ```
 
+La @fig-benchmark muestra lo que la tabla indica. La curva azul es el
+speedup real y la línea gris punteada, el speedup ideal sería, si Spark escalara
+perfectamente, ambas coincidirían. Sin embargo, no lo hacen, y la separación entre ellas
+crece con cada partición añadida. La curva naranja mide esa misma pérdida desde
+otro ángulo (cuánto rinde en promedio cada partición) y desciende de forma
+sostenida; en este sentido, las dos trayectorias quieren dar a conocer lo mismo.
+
+
 ```{python}
 #| label: interpretacion-benchmark
 #| echo: false
