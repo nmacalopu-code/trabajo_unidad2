@@ -191,17 +191,18 @@ entradas no existían, por eso se adaptó el proceso, no solo el lenguaje.
 
 **Semilla de 16 bases.** Un read completo casi nunca calza exacto contra la
 referencia (errores de secuenciación): 0 de 20 reads daban
-resultado. Se busca una semilla del inicio del read. El largo se eligió por especificidad: las apariciones esperadas por azar son `G/4^L`, con `G` = 2.982.397 bases. Con L=10 se esperan ~2.8 coincidencias aleatorias; con **L=16 la probabilidad baja a 0.0007**, de modo que un calce es
-casi con certeza real. Parametrizable con `--semilla`.
+resultado. Se busca una semilla del inicio del read. El largo se eligió por especificidad: las apariciones esperadas por azar son `G/4^L`, con `G` = 2.982.397 bases. Con L=16, el número esperado de ocurrencias bajo el modelo nulo es aproximadamente **0.0007**. Esto indica una alta especificidad teórica, aunque no demuestra que toda coincidencia observada sea biológicamente significativa. Parametrizable con `--semilla`.
 
 **`broadcast` del genoma en Spark.** El genoma se envía una sola vez a cada
 worker en lugar de replicarse en cada tarea.
 
 **`AdaptiveAvgPool1d` en la CNN 1D, no `AdaptiveMaxPool1d`.** La etiqueta depende
 del **conteo** de bases G/C en la ventana, y el max-pooling conserva solo la
-activación máxima, descartando el conteo. La primera versión con MaxPool colapsaba
-a la clase mayoritaria. No fue un ajuste de hiperparámetro, fue corregir un error
-conceptual de arquitectura.
+activación máxima, que puede perder información de frecuencia relevante para la
+tarea. Se sustituyó por `AdaptiveAvgPool1d` junto con cambios en la ponderación
+de clases, la tasa de aprendizaje y la codificación de entrada. Como los cuatro
+cambios se aplicaron a la vez, sin un estudio de ablación la mejora no puede
+atribuirse a una sola modificación.
 
 **Codificación one-hot de 4 canales.** Codificar las bases como enteros 0–3
 sugirió que T está "más lejos" de A que C, lo cual es biológicamente falso.
@@ -239,19 +240,23 @@ Hallazgos:
 - **Correctitud de la paralelización:** los 912.469 calces son **idénticos** en
   las 5 configuraciones del benchmark. La paralelización cambió el tiempo, no el
   resultado.
-- **Escalamiento:** el speedup crece hasta aproximadamente 7x, pero la eficiencia
-  (`speedup / particiones`) cae del aproximadamente 95% con 2 particiones a 43% 
+- **Escalamiento:** el speedup máximo es de **6.70x** con 16 particiones, pero la
+  eficiencia (`speedup / particiones`) cae del **96% con 2 particiones a 42%** con 16 
   aproximadamente con 16. Spark: acelera mientras el trabajo por partición supere el
   costo de coordinarla.
 - **Recurrencia:** densidad de autosimilaridad 0.2583 y cruzada 0.2476, contra
   0.2500 esperado al azar. La figura aparenta estructura, pero la medición dice
-  que es ruido. Se reporta como **resultado nulo**.
+  próxima al valor esperado bajo el modelo nulo considerado. Es descriptivamente
+  consistente con ausencia de estructura detectable, aunque no constituye un
+  resultado nulo demostrado estadísticamente (no se calculó distribución nula ni
+  prueba estadística).
 - **Composición del genoma:** 2.982.397 bases, GC = 58.77% (verificado de forma
   independiente con `grep` y `awk`), sin bases `N`.
-- **CNN 1D:** línea base 0.6780, **accuracy 0.9520**, precision 0.9802,
-  recall 0.9484. F1 de la clase mayoritaria 0.9640; **F1 de la clase minoritaria
+- **CNN 1D:** línea base 0.6780, **accuracy 0.9520**. Precisión de la clase 1
+  (mayoritaria) 0.9802, recall 0.9484. F1 de la clase mayoritaria (clase 1) 0.9640;
+  **F1 de la clase minoritaria (clase 0)
   0.9279 y macro-F1 0.9460**, al tener clases desbalanceadas, el número relevante es
-  el de la clase difícil.
+  el de la clase minoritaria.
 - **Búsqueda Bash:** 4 de 20 reads localizados con semilla de 16 bases.
 
 ### Nota sobre `regex_matches.csv`
@@ -309,16 +314,43 @@ trabajo_unidad2/
 
 ## 10. Licencia
 
-Código bajo licencia MIT (ver `LICENSE`). Los datos de Figshare están bajo
-CC BY 4.0.
+El código original desarrollado para este trabajo se distribuye bajo licencia MIT
+(ver `LICENSE`). Los componentes adaptados del repositorio `tap_pipeline_gen` se
+mantienen atribuidos a David A. Castro S. y quedan fuera del alcance de esta
+licencia, salvo autorización expresa del autor original. Los datos de Figshare
+están bajo CC BY 4.0.
 
 ---
 
-## 11. Declaración de uso de inteligencia artificial
+## 11. Atribución del código externo
 
-Este trabajo fue desarrollado con apoyo de **Claude (Anthropic)**. El análisis
-original del Problema 1 es de autoría propia. La asistencia de IA se empleó para:
-depurar errores de Nextflow, Bash y Spark y revisar la redacción.
-Cada sugerencia fue comprendida y verificada antes de incorporarse; varios de los
-errores documentados en este README se encontraron precisamente en ese proceso de
-verificación.
+El Proceso 2 adapta `calculoBashTask` y `generaReporteTask` del repositorio
+externo indicado en la guía del curso:
+
+- **Autor:** David A. Castro S.
+- **Repositorio:** `tap_pipeline_gen`
+- **Enlace:** https://github.com/DavidCastroSalinas/tap_pipeline_gen
+- **Consultado en:** julio de 2026
+- **Licencia:** el repositorio no declara un archivo de licencia explícito; su
+  uso aquí corresponde a la adaptación con fines académicos indicada por la guía.
+
+Las adaptaciones (dirección de búsqueda invertida, `generaReporteTask` de R a
+Python, rutas absolutas eliminadas, correcciones de compatibilidad) se detallan
+en la sección 6.
+
+---
+
+## 12. Declaración de uso de inteligencia artificial
+
+Este trabajo se desarrolló con apoyo de **Claude (Anthropic)**.
+
+El análisis del Problema 1, la publicación del conjunto de datos en Figshare, la
+creación y gestión del repositorio en GitHub, la construcción del pipeline en
+Nextflow, la adaptación de los procesos externos y la ejecución de todos los
+experimentos son de elaboración propia.
+
+La asistencia de IA se empleó en la generación de código para el reporte final
+del Proceso 3 y el informe en Quarto, en la depuración de errores de Nextflow,
+Bash, Spark y Git, en la revisión de la redacción y en el contraste de
+resultados intermedios. Todo el código generado con asistencia fue ejecutado y
+verificado sobre los datos reales antes de incorporarse al pipeline.
