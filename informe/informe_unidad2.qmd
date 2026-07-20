@@ -55,11 +55,7 @@ que integra el análisis de secuencias biológicas, procesos externos adaptados 
 
 El objetivo no fue obtener nuevos resultados biológicos, sino **transformar un
 análisis exploratorio de notebook en un flujo automatizado, parametrizado y
-verificable por terceros**. Los hallazgos más relevantes son de naturaleza
-metodológica, la paralelización con Spark rinde muy por debajo de lo ideal en
-esta carga de trabajo, un gráfico de recurrencia visualmente sugerente resultó
-ser ruido al medirlo, y una red convolucional aparentemente funcional no estaba
-aprendiendo nada por un error de arquitectura.
+verificable por terceros**. Los hallazgos más relevantes son de naturaleza metodológica: el escalamiento con Spark fue sublineal en esta carga de trabajo; el gráfico de recurrencia no mostró evidencia descriptiva de estructura por encima del modelo nulo considerado; y la CNN inicial no llegó a aprender y predecía siempre la misma clase, que se corrigió mediante cambios simultáneos en la arquitectura, la ponderación de clases, la tasa de aprendizaje y la codificación de entrada.
 
 ```{python}
 #| label: resumen-entorno
@@ -272,7 +268,7 @@ if consistente:
 **{int(bench['total_matches'].iloc[0]):,}** e **idéntico en las
 {len(bench)} configuraciones**. Es la verificación que hace interpretable todo lo
 anterior, la paralelización cambió el tiempo, no el resultado. Un speedup sobre
-resultados distintos no sería un speedup, sería un error.
+resultados distintos no sería una mejora de rendimiento, sino un error de correctitud.
 """.replace(",", " "))
 else:
     md("**Nota:** el total de calces no es constante entre configuraciones. "
@@ -426,7 +422,7 @@ predecía la misma clase para todas las muestras.
 La aritmética lo confirmó sin ambigüedad, con 3811 ejemplos de la clase 0,
 $0.7667 \times 4000 = 3067$ en entrenamiento más $0.7440 \times 1000 = 744$ en
 prueba dan exactamente 3811. Además, el accuracy quedaba congelado desde la
-época 20 hasta la 199 — la red no estaba aprendiendo, estaba rindiéndose.
+época 20 hasta la 199 — el desempeño de la red permaneció estancado y convergió hacia la predicción constante de la clase mayoritaria.
 
 Causas:
 
@@ -457,8 +453,7 @@ y no se trata de resultados mezclados sino de dos conjuntos distintos.
 
 El peso registrado en `cnn_results.csv` bajo el nombre `minority_weight`
 corresponde en realidad al **peso aplicado a la clase 1**; al ser esta la clase
-mayoritaria, un valor menor que 1 la penaliza, que es el comportamiento
-buscado.
+mayoritaria, un valor menor que 1 reduce la contribución de sus errores a la función de pérdida, compensando su mayor frecuencia en el conjunto de entrenamiento.
 
 ### Proceso 2: integración de procesos externos
 
@@ -500,11 +495,6 @@ repeticiones, composición desigual de bases y regiones de baja complejidad que
 el modelo nulo no recoge. El valor es parametrizable con `--semilla`.
 """)
 ```
-
-El reporte del Proceso 3 (`Reports/final_report.html`) y su figura
-(`Results/Figures/final_summary_plot.png`) se generan automáticamente en cada
-corrida y son distintos del reporte del Proceso 2, que resume únicamente la
-búsqueda Bash.
 
 ### Proceso 3: comparación entre herramientas
 
@@ -625,22 +615,13 @@ corrección.
 **Sobre la validación de resultados.** Dos de los hallazgos del trabajo fueron
 errores detectados por contraste con una línea base, la CNN que funcionaba con
 un accuracy igual al de la clase mayoritaria, y el gráfico de recurrencia que
-mostraba estructura donde solo había azar. En ambos casos el resultado parecía
+sugería visualmente una estructura cuya densidad, al cuantificarse, resultó próxima a la esperada bajo el modelo nulo considerado. En ambos casos el resultado parecía
 correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La línea base no fue un requisito, sino el criterio que permitió distinguir un resultado significativo de un comportamiento aparente.
 
-**Sobre la arquitectura de modelos.** El fallo de la CNN no era de ajuste sino de
-diseño, `AdaptiveMaxPool1d` descarta precisamente la información (el conteo) de
-la que depende la etiqueta. Esto permitió saber que antes de ajustar
-hiperparámetros conviene verificar que la arquitectura sea capaz, en principio,
-de representar la función que se le pide aprender.
+**Sobre la arquitectura de modelos.** El desempeño inicial de la CNN fue compatible con una arquitectura poco adecuada para una tarea propia de conteos. La sustitución de `AdaptiveMaxPool1d` por `AdaptiveAvgPool1d` formó parte de un conjunto de cuatro cambios aplicados simultáneamente; por ello no puede atribuirse causalmente la mejora a una sola modificación sin un estudio de descomposición.
 
 **Sobre la reproducibilidad.** La automatización debe registrar de manera verificable su propio estado de ejecución. Un pipeline que termina con `Succeeded: 5` puede haber publicado sus resultados en una carpeta llamada `null`, y un registro del estado de git puede marcar el árbol como malo por inspeccionar el directorio que él mismo produce; de este modo,la reproducibilidad siempre debe ser verificada y no solo declarada.
 
 ## Declaración de uso de inteligencia artificial
 
-Este trabajo fue desarrollado con apoyo de Claude (Anthropic). El análisis
-original del Problema 1 es de autoría propia. La asistencia se empleó para
-depurar errores de Nextflow, Bash y Spark, revisar la redacción y validar resultados intermedios.
-Cada sugerencia fue comprendida y verificada antes de incorporarse; varios de los
-errores documentados en este informe se detectaron precisamente en ese proceso
-de verificación.
+Este trabajo se desarrolló con apoyo de Claude (Anthropic) en la depuración de errores de Nextflow, Bash, Spark y Git, revisión de redacción y contraste de resultados intermedios. Por otra parte, el análisis del Problema 1, la publicacióndel conjunto de datos en Figshare, la creación y gestión del repositorio en GitHub, la construcción del pipeline en Nextflow, la adaptación de los procesos externos y la ejecución de todos los experimentos son de elaboración propia.
