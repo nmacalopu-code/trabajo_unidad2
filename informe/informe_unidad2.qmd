@@ -1,1 +1,550 @@
-# Se completara en la Fase 6 (informe final en Quarto)
+---
+title: "Pipeline reproducible con Nextflow, PySpark y Bash"
+subtitle: "Trabajo Unidad 2 — Técnicas Avanzadas de Programación"
+author: "Neyling Yuriko Teresa Macalopú Rimachi"
+date: today
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+    code-fold: true
+    code-summary: "Ver código"
+    theme: cosmo
+jupyter: python3
+---
+
+```{python}
+#| label: setup
+#| echo: false
+
+import os
+import pandas as pd
+from IPython.display import Markdown, display
+
+P1 = os.path.join("..", "Results", "Problem1")
+EX = os.path.join("..", "Results", "External")
+
+bench = pd.read_csv(os.path.join(P1, "benchmark_parallelization.csv")).sort_values("partitions")
+regex = pd.read_csv(os.path.join(P1, "regex_matches.csv"))
+cnn   = pd.read_csv(os.path.join(P1, "cnn_results.csv")).iloc[0]
+bash  = pd.read_csv(os.path.join(EX, "calculo_bash_resultados.csv"))
+par   = dict(zip(*pd.read_csv(os.path.join(P1, "run_parameters.csv")).values.T))
+
+bench["eficiencia"] = bench["speedup"] / bench["partitions"]
+
+def md(texto):
+    display(Markdown(texto))
+
+def tabla(cabeceras, filas):
+    out  = "| " + " | ".join(cabeceras) + " |\n"
+    out += "|" + "|".join(["---"] * len(cabeceras)) + "|\n"
+    for f in filas:
+        out += "| " + " | ".join(str(c) for c in f) + " |\n"
+    return out
+```
+
+## Resumen
+
+El presente informe presenta la construcción de un pipeline reproducible en Nextflow
+que integra el análisis de secuencias biológicas, procesos externos adaptados desde un repositorio de terceros, y un reporte final.
+
+El objetivo no fue obtener nuevos resultados biológicos, sino **transformar un
+análisis exploratorio de notebook en un flujo automatizado, parametrizado y
+verificable por terceros**. Los hallazgos más relevantes son de naturaleza
+metodológica, la paralelización con Spark rinde muy por debajo de lo ideal en
+esta carga de trabajo, un gráfico de recurrencia visualmente sugerente resultó
+ser ruido al medirlo, y una red convolucional aparentemente funcional no estaba
+aprendiendo nada por un error de arquitectura.
+
+```{python}
+#| label: resumen-entorno
+#| echo: false
+
+md(f"""
+La corrida analizada en este informe corresponde al commit
+`{par.get('git_commit', 'n/d')}`, ejecutada el {par.get('fecha_ejecucion', 'n/d')}
+sobre {par.get('cpus_logicos', 'n/d')} CPUs lógicas.
+""")
+```
+
+## Introducción y objetivos
+
+El trabajo integra reproducibilidad computacional, control de versiones,
+descarga automática de datos públicos, procesamiento distribuido y
+automatización con Bash. El pipeline debe poder ser clonado, ejecutado y
+revisado por terceros sin intervención manual.
+
+Los objetivos son
+
+1. **Proceso 1** — automatizar el análisis del Problema 1 con PySpark, partiendo
+   de la descarga de los datos desde Figshare.
+2. **Proceso 2** — integrar y **adaptar** los procesos `calculoBashTask` y
+   `generaReporteTask` de un repositorio externo.
+3. **Proceso 3** — generar un reporte final propio.
+
+## Metodología
+
+### Arquitectura del pipeline
+
+El pipeline se compone de cinco procesos de Nextflow. La topología no es lineal, es decir,
+tras la descarga, el análisis PySpark y el cálculo Bash se ejecutan **en
+paralelo**, y de eso dependen los dos reportes.
+La estructura es una decisión de diseño, al declarar
+únicamente las dependencias de datos reales, Nextflow paraleliza lo que puede
+paralelizarse. El grafo generado automáticamente está en
+`Results/pipeline_dag.html`.
+
+### Datos
+
+```{python}
+#| label: datos
+#| echo: false
+
+md(f"""
+Los datos provienen de un registro público de Figshare
+(DOI 10.6084/m9.figshare.32968955, licencia CC BY 4.0) con 7 archivos FASTA que
+suman aproximadamente 3.4 GB. El pipeline descarga **solo los dos archivos que el análisis
+necesita** (122 MB aproximadamente), controlado por el parámetro `--download_all`.
+
+El genoma de referencia (`{par.get('archivo_referencia', 'n/d')}`) tiene
+**{int(par.get('largo_genoma_bases', 0)):,} bases**. Del archivo de consulta
+(`{par.get('archivo_query', 'n/d')}`) se leen {par.get('n_reads', 'n/d')} reads.
+""".replace(",", " "))
+```
+
+La integridad se verifica contra el `supplied_md5` que publica la API de
+Figshare, si el hash no coincide, el pipeline se detiene. 
+
+## Resultados
+
+### Búsqueda mediante expresiones regulares
+
+```{python}
+#| label: regex
+#| echo: false
+
+n_patrones = len(regex)
+total = int(regex["match_count"].sum())
+por_largo = regex.groupby("sequence_length")["match_count"].mean().round(1)
+
+md(f"""
+Se evaluaron **{n_patrones} patrones** ({par.get('n_reads','?')} reads ×
+{len(str(par.get('largos_patron','')).split(';'))} largos × 3 formas de
+extracción), con un total de **{total:,} calces**.
+""".replace(",", " "))
+
+md(tabla(["Largo del patrón", "Calces promedio"],
+         [(int(k), f"{v:,.1f}".replace(",", " ")) for k, v in por_largo.items()]))
+```
+
+**Interpretación.** El número de calces cae de forma aproximadamente exponencial
+con el largo del patrón, que es lo que predice la teoría, si las cuatro bases
+fueran equiprobables, la frecuencia esperada de un patrón de largo $L$ en un
+genoma de $G$ bases es $G/4^L$. Cada base adicional divide entre cuatro las
+apariciones esperadas. Con largos de 16 o más, los calces prácticamente
+desaparecen, lo que hace de ese umbral el punto donde una subsecuencia deja de
+ser azar y empieza a ser señal.
+
+Un detalle de implementación con consecuencias, se usa *lookahead* `(?=(...))`
+para contar **ocurrencias solapadas**. Sin esto, la expresión regular avanza más
+allá de cada calce y subestima el conteo en patrones repetitivos.
+
+::: {.callout-note}
+## Sobre las posiciones registradas
+`regex_matches.csv` guarda las **primeras 10 posiciones** de cada patrón; el
+conteo completo está en `match_count`. Registrar todas las posiciones haría que el
+archivo no sea manejable sin aportar información adicional.
+:::
+
+### Paralelización con PySpark
+
+```{python}
+#| label: benchmark
+#| echo: false
+
+filas = [(int(r.partitions), f"{r.mean_time_s:.3f}", f"{r.std_time_s:.3f}",
+          f"{r.speedup:.2f}x", f"{r.eficiencia*100:.0f}%", int(r.total_matches))
+         for r in bench.itertuples()]
+md(tabla(["Particiones", "Tiempo medio (s)", "Desv. est. (s)",
+          "Speedup", "Eficiencia", "Calces totales"], filas))
+```
+
+```{python}
+#| label: fig-benchmark
+#| echo: false
+#| fig-cap: "Speedup real frente al ideal, y eficiencia por partición."
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker
+
+fig, ax = plt.subplots(figsize=(8, 4.5))
+ax.plot(bench["partitions"], bench["speedup"], "o-", color="#2c6fbb",
+        linewidth=2, markersize=7, label="Speedup real")
+ax.plot(bench["partitions"], bench["partitions"], "--", color="gray",
+        linewidth=1.2, label="Speedup ideal (lineal)")
+ax.set_xlabel("Número de particiones de Spark")
+ax.set_ylabel("Speedup (x veces)", color="#2c6fbb")
+ax.set_xscale("log", base=2)
+ax.set_xticks(bench["partitions"])
+ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+ax.grid(alpha=0.3, linestyle="--")
+ax.set_axisbelow(True)
+
+ax2 = ax.twinx()
+ax2.plot(bench["partitions"], bench["eficiencia"] * 100, "s-",
+         color="#c1512a", linewidth=2, markersize=6, label="Eficiencia")
+ax2.set_ylabel("Eficiencia = speedup / particiones (%)", color="#c1512a")
+ax2.set_ylim(0, 115)
+
+lineas = ax.get_lines() + ax2.get_lines()
+ax.legend(lineas, [l.get_label() for l in lineas], loc="upper left", fontsize=9)
+ax.set_title("Escalamiento de la paralelización en PySpark")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: interpretacion-benchmark
+#| echo: false
+
+mejor = bench.loc[bench["speedup"].idxmax()]
+peor_ef = bench.iloc[-1]
+consistente = bench["total_matches"].nunique() == 1
+
+md(f"""
+**Interpretación.** El mejor speedup es **{mejor.speedup:.2f}x** con
+{int(mejor.partitions)} particiones, sobre {par.get('cpus_logicos','?')} CPUs
+lógicas. Pero el número que importa es la **eficiencia**: con
+{int(peor_ef.partitions)} particiones cada una rinde apenas el
+**{peor_ef.eficiencia*100:.0f}%** de lo que rendiría en un escalamiento perfecto.
+
+La brecha entre la curva real y la ideal es el costo de coordinación, es decir, serializar
+las tareas, repartirlas entre los ejecutores y recolectar los resultados. Ese
+costo es fijo por partición, mientras que el trabajo útil por partición
+disminuye a medida que se divide más. Se concluye que en la práctica **Spark no
+acelera automáticamente, sino que hace que acelere mientras el trabajo por partición supere el
+costo de coordinarla.**
+
+La desviación estándar pasa de {bench.iloc[0].std_time_s:.3f} s con 1 partición
+a {peor_ef.std_time_s:.3f} s con {int(peor_ef.partitions)}. Esa dispersión
+creciente es la firma de la saturación, con muchas particiones compitiendo por
+los mismos núcleos, el tiempo depende cada vez más de la contención.
+""")
+
+if consistente:
+    md(f"""
+**Prueba de correctitud.** El total de calces es
+**{int(bench['total_matches'].iloc[0]):,}** e **idéntico en las
+{len(bench)} configuraciones**. Es la verificación que hace interpretable todo lo
+anterior, la paralelización cambió el tiempo, no el resultado. Un speedup sobre
+resultados distintos no sería un speedup, sería un error.
+""".replace(",", " "))
+else:
+    md("**Nota:** el total de calces no es constante entre configuraciones. "
+       "Esto indicaría un error en la paralelización y debe investigarse.")
+```
+
+### Gráficos de recurrencia
+
+```{python}
+#| label: recurrencia
+#| echo: false
+
+md("""
+Se generó un gráfico de recurrencia para evaluar autosimilaridad dentro de una
+secuencia y similitud entre la consulta y la referencia
+(`Results/Problem1/Figures/recurrence_plot.png`).
+""")
+```
+
+**Interpretación** La densidad de recurrencia medida fue de
+0.2583 en el caso de autosimilaridad y 0.2476 en el cruzado, frente a **0.25
+esperado al azar** (con cuatro bases, dos posiciones cualquiera
+coinciden una de cada cuatro veces).
+
+La figura muestra un patrón de textura que parece una estructura
+biológica. Sin embargo no lo es, la medición dice que es lo que se obtendría con secuencias
+aleatorias. Se reporta como **resultado nulo**, y es uno de los hallazgos
+más instructivo del trabajo, un gráfico a veces no sustituye a una medición,
+y la línea base era importante para saber qué se estaba mirando.
+
+### Codificación 8-bit y convoluciones 1D
+
+La codificación usa k-meros de largo 4 sobre el alfabeto `{A, C, G, T}`, lo que
+produce $4^4 = 256$ valores distintos, exactamente el rango de un entero sin
+signo de 8 bits (`uint8`, 0–255). La correspondencia es la razón
+por la que el enunciado sugiere ese largo.
+
+Sobre esa señal se aplicaron convoluciones 1D, cuya serie de tiempo resultante
+está en `Results/Problem1/conv1d_timeseries.csv` y su visualización en
+`Results/Problem1/Figures/conv1d_signal.png`.
+
+Un cambio necesario durante el desarrollo fue **unificar el diccionario de
+bases**. Existían dos mapeos distintos en partes distintas del código, lo que
+producía codificaciones incompatibles entre sí. Ahora hay un único
+`BASE_MAP = {A:0, C:1, G:2, T:3}`.
+
+### Búsqueda jerárquica con CNN 1D
+
+```{python}
+#| label: cnn
+#| echo: false
+
+acc  = float(cnn["accuracy"])
+base = float(cnn["baseline"])
+tn, fp, fn, tp = (int(cnn[c]) for c in ("true_neg", "false_pos", "false_neg", "true_pos"))
+
+# F1 de cada clase, calculado desde la matriz de confusión
+def f1(p, r):
+    return 2 * p * r / (p + r) if (p + r) else 0.0
+
+prec_may, rec_may = tn / (tn + fn) if (tn + fn) else 0, tn / (tn + fp) if (tn + fp) else 0
+prec_min, rec_min = tp / (tp + fp) if (tp + fp) else 0, tp / (tp + fn) if (tp + fn) else 0
+f1_may, f1_min = f1(prec_may, rec_may), f1(prec_min, rec_min)
+macro = (f1_may + f1_min) / 2
+
+md(tabla(["Métrica", "Valor"], [
+    ("Línea base (clase mayoritaria)", f"{base:.4f}"),
+    ("Accuracy",                       f"**{acc:.4f}**"),
+    ("F1 clase mayoritaria",           f"{f1_may:.4f}"),
+    ("F1 clase minoritaria",           f"**{f1_min:.4f}**"),
+    ("Macro-F1",                       f"{macro:.4f}"),
+    ("Clases distintas predichas",     int(cnn["n_classes_predicted"])),
+    ("Épocas",                         int(cnn["epochs"])),
+    ("Peso de la clase minoritaria",   f"{float(cnn['minority_weight']):.3f}"),
+]))
+
+md(tabla(["", "Predicho 0", "Predicho 1"],
+         [("**Real 0**", tn, fp), ("**Real 1**", fn, tp)]))
+```
+
+```{python}
+#| label: cnn-interpretacion
+#| echo: false
+
+md(f"""
+**Interpretación.** El modelo supera la línea base en
+**{(acc - base) * 100:.1f} puntos porcentuales** y predice
+{int(cnn['n_classes_predicted'])} clases distintas. Con clases desbalanceadas,
+el accuracy por sí solo no dice nada, de este modo, la métrica que importa es el
+**F1 de la clase minoritaria, {f1_min:.4f}**.
+""")
+```
+
+#### El diagnóstico que hizo falta y correcciones
+
+La primera versión alcanzó un accuracy de 0.7440 y parecía razonable. Sin embargo,
+0.7440 era **exactamente** la proporción de la clase mayoritaria. El modelo
+predecía la misma clase para todas las muestras.
+
+La aritmética lo confirmó sin ambigüedad, con 3811 ejemplos de la clase 0,
+$0.7667 \times 4000 = 3067$ en entrenamiento más $0.7440 \times 1000 = 744$ en
+prueba dan exactamente 3811. Además, el accuracy quedaba congelado desde la
+época 20 hasta la 199 — la red no estaba aprendiendo, estaba rindiéndose.
+
+Causas:
+
+1. **Desbalance de clases (76% / 24%).** Ante una función de pérdida sin
+   ponderar, predecir siempre la clase mayoritaria es un óptimo local cómodo.
+2. **`AdaptiveMaxPool1d` era incompatible con la tarea.** La etiqueta 
+   depende del **conteo** de bases G/C en la ventana, y el
+   max-pooling conserva únicamente la activación máxima, **descartando el
+   conteo**. La arquitectura no podía resolver el problema, por diseño. Ningún
+   ajuste de hiperparámetros lo habría salvado.
+
+Las correcciones aplicadas fueron: `AdaptiveAvgPool1d` en lugar de
+`AdaptiveMaxPool1d` (el promedio sí preserva la información de conteo), pesos de
+clase en `CrossEntropyLoss`, tasa de aprendizaje de 1e-3 a 1e-2, y **codificación
+one-hot de 4 canales** en reemplazo de enteros 0–3, codificar las bases como una
+escala numérica le sugiere a la red que T está "más lejos" de A que C, lo cual es
+biológicamente falso.
+
+### Proceso 2: integración de procesos externos
+
+```{python}
+#| label: bash
+#| echo: false
+
+enc = int((bash["encontrado"].astype(str).str.lower() == "si").sum())
+n_b = len(bash)
+L   = int(bash["largo_semilla"].iloc[0])
+G   = int(par.get("largo_genoma_bases", 0))
+esperadas = G / (4 ** L)
+
+md(f"""
+El proceso `calculoBashTask` adaptado localizó **{enc} de {n_b} reads** usando
+una semilla de {L} bases, con un tiempo medio de
+{bash['tiempo_ms'].mean():.1f} ms por búsqueda.
+""")
+```
+
+**Por qué una semilla y no el read completo.** Buscar el read entero no
+encontraba nada: 0 de 20. Porque un read real difiere de la
+referencia por errores de secuenciación y puede provenir de la hebra
+complementaria. Los alineadores reales resuelven esto igual, buscan una
+**semilla** corta y extienden desde ahí.
+
+```{python}
+#| label: semilla
+#| echo: false
+
+md(f"""
+**Por qué 16 bases.** El largo se eligió por especificidad, no por tanteo. Las
+apariciones esperadas por azar de un patrón de largo $L$ son $G/4^L$; con
+$G = {G:,}$ bases y $L = {L}$, eso da **{esperadas:.4f}** apariciones esperadas.
+Es decir, la probabilidad de que un calce sea casualidad es inferior al 0.1%: si
+aparece, es real. El valor es parametrizable con `--semilla`.
+""".replace(",", " "))
+```
+
+Las adaptaciones sobre el código externo están documentadas en detalle en el
+README (sección 6). Las dos de fondo fueron **invertir la dirección de búsqueda**,
+para alinearla con lo que se pide en el trabajo y con lo que hace el Proceso 1; y
+**reimplementar `generaReporteTask` de R a Python**, dado que el original leía
+salidas de procesos que no forman parte de este pipeline y habría exigido
+arrastrar un entorno de R completo para un solo script.
+
+### Proceso 3: comparación entre herramientas
+
+```{python}
+#| label: comparacion
+#| echo: false
+
+p_pipeline = int(par.get("particiones", 4))
+fila = bench[bench["partitions"] == p_pipeline]
+fila = fila.iloc[0] if len(fila) else bench.loc[bench["mean_time_s"].idxmin()]
+
+spark_ms = float(fila["time_per_pattern_s"]) * 1000
+bash_ms  = float(bash["tiempo_ms"].mean())
+
+md(tabla(["Métrica", "PySpark", "Bash + awk"], [
+    ("Búsquedas realizadas",   int(fila["n_patterns"]), n_b),
+    ("Tiempo por búsqueda",    f"**{spark_ms:.2f} ms**", f"**{bash_ms:.2f} ms**"),
+    ("Ocurrencias contadas",   "todas (solapadas)", "solo la primera"),
+    ("Paralelismo",            f"{p_pipeline} particiones", "secuencial"),
+]))
+
+md(f"""
+**Interpretación** Las dos herramientas **no ejecutan la misma carga**: PySpark evalúa {int(fila['n_patterns'])} patrones de largo variable contando todas las
+ocurrencias solapadas, mientras Bash busca {n_b} reads por una semilla 
+fija y se detiene en la primera coincidencia.
+Comparar tiempos totales sería engañoso, por eso la comparación se normaliza por
+búsqueda.
+
+Aun así, la lectura correcta es cualitativa, PySpark resulta
+**{bash_ms/spark_ms:.1f} veces más rápido por búsqueda** haciendo estrictamente
+*más* trabajo en cada una. Pero paga un costo fijo de arranque, la JVM y el
+contexto de Spark. que esta métrica no captura y que solo se amortiza con
+volumen. Con {n_b} búsquedas, Bash es la herramienta razonable; con
+{int(fila['n_patterns'])} o más, deja de serlo.
+""")
+```
+
+El reporte del Proceso 3 (`Reports/final_report.html`) y su figura
+(`Results/Figures/final_summary_plot.png`) se generan automáticamente en cada
+corrida y son distintos del reporte del Proceso 2, que resume únicamente la
+búsqueda Bash.
+
+## Reproducibilidad
+
+Las decisiones que sostienen la reproducibilidad del pipeline:
+
+**Semilla aleatoria fija.** Sin ella cada ejecución daría números distintos, que
+en un trabajo sobre reproducibilidad este sería un problema.
+
+**Verificación MD5 contra Figshare.** El pipeline compara el hash de lo
+descargado contra el `supplied_md5` de la API y se detiene si difiere.
+
+**Cero rutas absolutas.** Los scripts se pasan mediante
+`Channel.fromPath("${projectDir}/scripts/...")`.
+
+**Auto-registro del entorno.** `run_parameters.csv` captura 26 parámetros en cada
+corrida, incluidas todas las versiones y el commit de git.
+
+```{python}
+#| label: entorno
+#| echo: false
+
+md(tabla(["Componente", "Versión"], [
+    ("Sistema",        par.get("sistema_operativo", "n/d")),
+    ("Python",         par.get("python_version", "n/d")),
+    ("Java",           par.get("java_version", "n/d")),
+    ("Spark/PySpark",  f"{par.get('spark_version','n/d')} / {par.get('pyspark_version','n/d')}"),
+    ("PyTorch",        par.get("torch_version", "n/d")),
+    ("Semilla",        par.get("seed", "n/d")),
+    ("Commit",         par.get("git_commit", "n/d")),
+]))
+```
+
+::: {.callout-important}
+## Problema de reproducibilidad 
+El registro del estado de git marcaba el árbol como "sucio" aunque el código
+estuviera confirmado. La causa era doble. Primero, el chequeo incluía `Results/`,
+que **genera el propio pipeline**: el árbol se ensuciaba solo. Y al excluir esa
+carpeta con `:!Results` el problema persistía, porque el proceso se ejecuta
+dentro del `work/` de Nextflow y **git interpreta los pathspec relativos al
+directorio actual**, no a la raíz del repositorio. La solución fue
+`:(top,exclude)`, que los ancla a la raíz.
+
+La pregunta que el parámetro debe responder es
+"¿estaba el **código** versionado cuando esto se ejecutó?".
+:::
+
+## Limitaciones
+
+**El benchmark mide una máquina compartida.** Los tiempos varían alrededor de un
+10% entre corridas porque el sistema operativo compite por los mismos núcleos.
+Por eso se promedian tres repeticiones y se reporta la desviación estándar.
+
+**El análisis usa un subconjunto de los datos.** Se leen 20 reads de los 725 228
+disponibles. Esto permitió demostrar el flujo automatizado pero no permite 
+conclusiones biológicas sobre la muestra.
+
+**La comparación PySpark / Bash no es una comparación controlada.** Como se
+detalló, las cargas difieren en cantidad, algoritmo y criterio de conteo.
+
+**La ruta de instalación con conda no fue ejecutada.** El `environment.yml`
+replica las versiones verificadas, pero el entorno que se probó es el de `venv`
+descrito en `env/requirements.txt`.
+
+## Conclusiones
+
+**Sobre la paralelización.** Spark no es un acelerador automático. En esta carga
+el speedup se queda muy por debajo del lineal y la eficiencia por partición cae
+drásticamente al aumentar el paralelismo. Paralelizar tiene un costo, y ese costo
+solo se justifica cuando el trabajo por partición lo supera. El hecho de que el
+número de calces se mantenga idéntico en todas las configuraciones es lo que
+permite afirmar que la diferencia observada es de rendimiento y no de
+corrección.
+
+**Sobre la validación de resultados.** Dos de los hallazgos del trabajo fueron
+errores detectados por contraste con una línea base, la CNN que funcionaba con
+un accuracy igual al de la clase mayoritaria, y el gráfico de recurrencia que
+mostraba estructura donde solo había azar. En ambos casos el resultado parecía
+correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La
+línea base no funcionó como un requisito sino es lo que distingue un resultado de
+algo que no era real.**
+
+**Sobre la arquitectura de modelos.** El fallo de la CNN no era de ajuste sino de
+diseño, `AdaptiveMaxPool1d` descarta precisamente la información (el conteo) de
+la que depende la etiqueta. Esto permitió saber que antes de ajustar
+hiperparámetros conviene verificar que la arquitectura sea capaz, en principio,
+de representar la función que se le pide aprender.
+
+**Sobre la reproducibilidad.** Para garantizar que la automatización dijera la verdad 
+sobre sí misma. Un pipeline que termina con `Succeeded: 5` puede haber publicado 
+sus resultados en una carpeta llamada `null`; un registro de estado de git 
+puede marcar "sucio" por inspeccionar el directorio que él mismo produce. 
+La reproducibilidad debe ser verificada y no solo declarada.
+
+## Declaración de uso de inteligencia artificial
+
+Este trabajo fue desarrollado con apoyo de Claude (Anthropic). El análisis
+original del Problema 1 es de autoría propia. La asistencia se empleó para
+depurar errores de Nextflow, Bash y Spark, revisar la redacción y validar resultados intermedios.
+Cada sugerencia fue comprendida y verificada antes de incorporarse; varios de los
+errores documentados en este informe se detectaron precisamente en ese proceso
+de verificación.
