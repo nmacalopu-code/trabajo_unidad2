@@ -1,5 +1,5 @@
 parametro,valor
-fecha_ejecucion,2026-07-19T17:08:16
+fecha_ejecucion,2026-07-19T23:12:31
 sistema_operativo,Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43
 python_version,3.14.4
 java_version,17.0.19
@@ -9,7 +9,7 @@ torch_version,2.13.0+cpu
 numpy_version,2.5.1
 pandas_version,3.0.3
 matplotlib_version,3.11.0
-git_commit,b31b594 (árbol limpio)
+git_commit,9b063a0 (árbol limpio)
 cpus_logicos,16
 seed,42
 archivo_referencia,Genoma_referencia.fasta
@@ -21,7 +21,7 @@ k_mer,4
 particiones,4
 benchmark_particiones,"1,2,4,8,16"
 repeticiones,3
-mejor_speedup,6.974
+mejor_speedup,6.701
 mejor_n_particiones,16
 cnn_epochs,300
 cnn_samples,5000

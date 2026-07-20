@@ -252,23 +252,39 @@ else:
 #| label: recurrencia
 #| echo: false
 
+ruta_rec = os.path.join(P1, "recurrence_metrics.csv")
+
 md("""
 Se generó un gráfico de recurrencia para evaluar autosimilaridad dentro de una
-secuencia y similitud entre la consulta y la referencia
+secuencia y similitud entre la secuencia de consulta y la de referencia
 (`Results/Problem1/Figures/recurrence_plot.png`).
 """)
+
+if os.path.isfile(ruta_rec):
+    rec = pd.read_csv(ruta_rec).iloc[0]
+    d_auto = float(rec["densidad_autosimilaridad"])
+    d_cruz = float(rec["densidad_cruzada"])
+    d_azar = float(rec["densidad_esperada_azar"])
+    dif_a, dif_c = abs(d_auto - d_azar), abs(d_cruz - d_azar)
+    veredicto = ("**no se distingue de lo esperador**"
+                 if max(dif_a, dif_c) < 0.02
+                 else "**se aparta de lo esperado**")
+
+    md(f"""
+**Interpretación.** La densidad de recurrencia medida fue de
+**{d_auto:.4f}** en autosimilaridad y **{d_cruz:.4f}** en el caso cruzado, frente
+a **{d_azar:.4f} esperado puramente por azar** (con cuatro bases, dos posiciones
+cualesquiera coinciden una de cada cuatro veces). Las desviaciones son de
+{dif_a:.4f} y {dif_c:.4f} respectivamente, la señal medida {veredicto}.
+
+La figura muestra un patrón de textura que parece estructura
+biológica. Sin embargo, no lo es, se reporta como **resultado nulo**, y es probablemente el
+hallazgo más instructivo del trabajo, pues un gráfico no sustituye a una
+medición, y la línea base era indispensable para saber qué se estaba mirando.
+""")
+else:
+    md("**Falta `recurrence_metrics.csv` — ejecutar el pipeline antes de renderizar.**")
 ```
-
-**Interpretación** La densidad de recurrencia medida fue de
-0.2583 en el caso de autosimilaridad y 0.2476 en el cruzado, frente a **0.25
-esperado al azar** (con cuatro bases, dos posiciones cualquiera
-coinciden una de cada cuatro veces).
-
-La figura muestra un patrón de textura que parece una estructura
-biológica. Sin embargo no lo es, la medición dice que es lo que se obtendría con secuencias
-aleatorias. Se reporta como **resultado nulo**, y es uno de los hallazgos
-más instructivo del trabajo, un gráfico a veces no sustituye a una medición,
-y la línea base era importante para saber qué se estaba mirando.
 
 ### Codificación 8-bit y convoluciones 1D
 
