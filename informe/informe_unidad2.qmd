@@ -13,6 +13,8 @@ format:
     code-fold: true
     code-summary: "Ver código"
     theme: cosmo
+language:
+  title-block-published: "Fecha de entrega"
 jupyter: python3
 ---
 
@@ -158,13 +160,13 @@ md(tabla(["Largo del patrón", "Calces promedio"],
          [(int(k), f"{v:,.1f}".replace(",", " ")) for k, v in por_largo.items()]))
 ```
 
-**Interpretación.** El número de calces cae de forma aproximadamente exponencial
+El número de calces cae de forma aproximadamente exponencial
 con el largo del patrón, que es lo que predice la teoría, si las cuatro bases
 fueran equiprobables, la frecuencia esperada de un patrón de largo $L$ en un
 genoma de $G$ bases es $G/4^L$. Cada base adicional divide entre cuatro las
 apariciones esperadas. Con largos de 16 o más, los calces prácticamente
-desaparecen, lo que hace de ese umbral el punto donde una subsecuencia deja de
-ser azar y empieza a ser señal.
+desaparecen, de modo que a partir de ese umbral una subsecuencia presenta una
+probabilidad reducida de coincidencia aleatoria bajo el modelo nulo.
 
 Un detalle de implementación con consecuencias, se usa *lookahead* `(?=(...))`
 para contar **ocurrencias solapadas**. Sin esto, la expresión regular avanza más
@@ -193,37 +195,39 @@ md(tabla(["Particiones", "Tiempo medio (s)", "Desv. est. (s)",
 ```{python}
 #| label: fig-benchmark
 #| echo: false
-#| fig-cap: "Speedup real frente al ideal, y eficiencia por partición."
+#| fig-cap: "Arriba, speedup real frente al ideal. Abajo, eficiencia por partición."
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker
 
-fig, ax = plt.subplots(figsize=(9, 5.5))
-ax.plot(bench["partitions"], bench["speedup"], "o-", color="#2c6fbb",
+fig, (a1, a2) = plt.subplots(2, 1, figsize=(6.5, 7), sharex=True)
+
+a1.plot(bench["partitions"], bench["speedup"], "o-", color="#2c6fbb",
         linewidth=2, markersize=7, label="Speedup real")
-ax.plot(bench["partitions"], bench["partitions"], "--", color="gray",
+a1.plot(bench["partitions"], bench["partitions"], "--", color="gray",
         linewidth=1.2, label="Speedup ideal (lineal)")
-ax.set_xlabel("Número de particiones de Spark")
-ax.set_ylabel("Speedup (x veces)", color="#2c6fbb")
-ax.set_xscale("log", base=2)
-ax.set_xticks(bench["partitions"])
-ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-ax.grid(alpha=0.3, linestyle="--")
-ax.set_axisbelow(True)
+a1.set_ylabel("Speedup (x veces)")
+a1.set_title("Escalamiento de la paralelización en PySpark", fontsize=11)
+a1.legend(fontsize=9, loc="upper left")
+a1.grid(alpha=0.3, linestyle="--")
+a1.set_axisbelow(True)
 
-ax2 = ax.twinx()
-ax2.plot(bench["partitions"], bench["eficiencia"] * 100, "s-",
-         color="#c1512a", linewidth=2, markersize=6, label="Eficiencia")
-ax2.set_ylabel("Eficiencia = speedup / particiones (%)", color="#c1512a")
-ax2.set_ylim(0, 115)
+a2.plot(bench["partitions"], bench["eficiencia"] * 100, "s-",
+        color="#c1512a", linewidth=2, markersize=6)
+a2.axhline(100, color="gray", linestyle="--", linewidth=1.2)
+a2.set_ylabel("Eficiencia (%)")
+a2.set_xlabel("Número de particiones de Spark")
+a2.set_ylim(0, 115)
+a2.grid(alpha=0.3, linestyle="--")
+a2.set_axisbelow(True)
+for x, y in zip(bench["partitions"], bench["eficiencia"] * 100):
+    a2.annotate(f"{y:.0f}%", (x, y), textcoords="offset points",
+                xytext=(0, 8), ha="center", fontsize=8, color="#c1512a")
 
-lineas = ax.get_lines() + ax2.get_lines()
-ax.legend(lineas, [l.get_label() for l in lineas],
-          loc="upper center", bbox_to_anchor=(0.5, -0.13),
-          ncol=3, frameon=False, fontsize=10)
-ax.set_title("Escalamiento de la paralelización en PySpark")
+a2.set_xscale("log", base=2)
+a2.set_xticks(bench["partitions"])
+a2.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
 fig.tight_layout()
-fig.subplots_adjust(bottom=0.22)
 plt.show()
 ```
 
@@ -244,7 +248,7 @@ peor_ef = bench.iloc[-1]
 consistente = bench["total_matches"].nunique() == 1
 
 md(f"""
-**Interpretación.** El mejor speedup es **{mejor.speedup:.2f}x** con
+El mejor speedup es **{mejor.speedup:.2f}x** con
 {int(mejor.partitions)} particiones, sobre {par.get('cpus_logicos','?')} CPUs
 lógicas. Pero el número que importa es la **eficiencia**: con
 {int(peor_ef.partitions)} particiones cada una rinde apenas el
@@ -294,23 +298,37 @@ if os.path.isfile(ruta_rec):
     d_auto = float(rec["densidad_autosimilaridad"])
     d_cruz = float(rec["densidad_cruzada"])
     d_azar = float(rec["densidad_esperada_azar"])
-    dif_a, dif_c = abs(d_auto - d_azar), abs(d_cruz - d_azar)
-    veredicto = ("**no se distingue de lo esperador**"
-                 if max(dif_a, dif_c) < 0.02
-                 else "**se aparta de lo esperado**")
+    nb = int(rec["n_bases"])
+    # La matriz de autosimilaridad incluye la diagonal principal, donde cada
+    # posicion coincide consigo misma por construccion. Se descuenta.
+    celdas = nb * nb
+    d_auto_sd = (d_auto * celdas - nb) / (celdas - nb)
 
     md(f"""
-**Interpretación.** La densidad de recurrencia medida fue de
-**{d_auto:.4f}** en autosimilaridad y **{d_cruz:.4f}** en el caso cruzado, frente
-a **{d_azar:.4f} esperado puramente por azar** (con cuatro bases, dos posiciones
-cualesquiera coinciden una de cada cuatro veces). Las desviaciones son de
-{dif_a:.4f} y {dif_c:.4f} respectivamente, la señal medida {veredicto}.
+Las densidades medidas fueron **{d_auto:.4f}** en autosimilaridad y
+**{d_cruz:.4f}** en el caso cruzado, frente a **{d_azar:.4f}** esperado bajo un
+modelo nulo de bases independientes y equiprobables (con cuatro bases, dos
+posiciones cualquiera coinciden una de cada cuatro veces).
 
-La figura muestra un patrón de textura que parece estructura
-biológica. Sin embargo, no lo es, se reporta como **resultado nulo**, y es probablemente el
-hallazgo más instructivo del trabajo, pues un gráfico no sustituye a una
-medición, y la línea base era indispensable para saber qué se estaba mirando.
+La matriz de autosimilaridad **incluye la diagonal principal**, donde cada
+posición coincide consigo misma por construcción y eleva artificialmente la
+densidad. Descontándola sobre las {nb} bases evaluadas, la densidad baja a
+**{d_auto_sd:.4f}**, aún más cerca del valor teórico.
+
+Las desviaciones respecto del modelo nulo son pequeñas
+({abs(d_auto_sd - d_azar):.4f} y {abs(d_cruz - d_azar):.4f}), lo que es
+**consistente con la ausencia de estructura detectable** a esta escala. Cabe
+mencionar que se trata de una observación descriptiva y no de un resultado nulo
+demostrado, es otras palabras, no se calculó una distribución nula por permutaciones, 
+ni un intervalo de confianza, tampoco se aplicó una prueba estadística. 
+Establecerlo de manera fija exigiría comparar contra secuencias simuladas.
+
+La figura muestra un patrón de textura que a simple vista sugiere estructura
+biológica. La medición no respalda esa lectura, y ese contraste es lo
+instructivo, es decir, un gráfico convincente no sustituye a una cuantificación, 
+y sin la línea base no habría forma de saber qué se está mirando.
 """)
+
 else:
     md("**Falta `recurrence_metrics.csv` — ejecutar el pipeline antes de renderizar.**")
 ```
@@ -329,7 +347,7 @@ está en `Results/Problem1/conv1d_timeseries.csv` y su visualización en
 Un cambio necesario durante el desarrollo fue **unificar el diccionario de
 bases**. Existían dos mapeos distintos en partes distintas del código, lo que
 producía codificaciones incompatibles entre sí. Ahora hay un único
-`BASE_MAP = {A:0, C:1, G:2, T:3}`.
+`BASE_MAP = {"A": 0, "C": 1, "G": 2, "T": 3}`.
 
 ### Búsqueda jerárquica con CNN 1D
 
@@ -345,20 +363,39 @@ tn, fp, fn, tp = (int(cnn[c]) for c in ("true_neg", "false_pos", "false_neg", "t
 def f1(p, r):
     return 2 * p * r / (p + r) if (p + r) else 0.0
 
-prec_may, rec_may = tn / (tn + fn) if (tn + fn) else 0, tn / (tn + fp) if (tn + fp) else 0
-prec_min, rec_min = tp / (tp + fp) if (tp + fp) else 0, tp / (tp + fn) if (tp + fn) else 0
-f1_may, f1_min = f1(prec_may, rec_may), f1(prec_min, rec_min)
-macro = (f1_may + f1_min) / 2
+# Metricas por clase, halladas a partir de la matriz de confusion.
+
+n0, n1 = tn + fp, fn + tp          # muestras reales de cada clase
+
+def metricas(vp, vfp, vfn):
+    p = vp / (vp + vfp) if (vp + vfp) else 0.0
+    r = vp / (vp + vfn) if (vp + vfn) else 0.0
+    return f1(p, r)
+
+f1_c0 = metricas(tn, fn, fp)       # clase 0 tratada como positiva
+f1_c1 = metricas(tp, fp, fn)       # clase 1 tratada como positiva
+macro = (f1_c0 + f1_c1) / 2
+
+if n0 >= n1:
+    clase_may, clase_min = 0, 1
+    n_may, n_min = n0, n1
+    f1_may, f1_min = f1_c0, f1_c1
+else:
+    clase_may, clase_min = 1, 0
+    n_may, n_min = n1, n0
+    f1_may, f1_min = f1_c1, f1_c0
+
+prop_may = n_may / (n0 + n1)
 
 md(tabla(["Métrica", "Valor"], [
     ("Línea base (clase mayoritaria)", f"{base:.4f}"),
     ("Accuracy",                       f"**{acc:.4f}**"),
-    ("F1 clase mayoritaria",           f"{f1_may:.4f}"),
-    ("F1 clase minoritaria",           f"**{f1_min:.4f}**"),
+    (f"F1 clase mayoritaria (clase {clase_may}, n={n_may})", f"{f1_may:.4f}"),
+    (f"F1 clase minoritaria (clase {clase_min}, n={n_min})", f"**{f1_min:.4f}**"),
     ("Macro-F1",                       f"{macro:.4f}"),
     ("Clases distintas predichas",     int(cnn["n_classes_predicted"])),
     ("Épocas",                         int(cnn["epochs"])),
-    ("Peso de la clase minoritaria",   f"{float(cnn['minority_weight']):.3f}"),
+    ("Peso aplicado a la clase 1",     f"{float(cnn['minority_weight']):.3f}"),
 ]))
 
 md(tabla(["", "Predicho 0", "Predicho 1"],
@@ -370,11 +407,13 @@ md(tabla(["", "Predicho 0", "Predicho 1"],
 #| echo: false
 
 md(f"""
-**Interpretación.** El modelo supera la línea base en
-**{(acc - base) * 100:.1f} puntos porcentuales** y predice
-{int(cnn['n_classes_predicted'])} clases distintas. Con clases desbalanceadas,
-el accuracy por sí solo no dice nada, de este modo, la métrica que importa es el
-**F1 de la clase minoritaria, {f1_min:.4f}**.
+El modelo alcanza un accuracy de **{acc:.4f}** frente a una
+línea base de {base:.4f} (la proporción de la clase mayoritaria), y predice
+{int(cnn['n_classes_predicted'])} clases distintas. Con clases desbalanceadas el
+accuracy debe complementarse con métricas por clase, en este caso, el **F1 de la clase
+minoritaria (clase {clase_min}) es {f1_min:.4f}** y el **Macro-F1, {macro:.4f}**.
+En este conjunto la clase mayoritaria es la **clase {clase_may}**, con
+{prop_may*100:.1f}% de las muestras del conjunto de prueba.
 """)
 ```
 
@@ -396,15 +435,30 @@ Causas:
 2. **`AdaptiveMaxPool1d` era incompatible con la tarea.** La etiqueta 
    depende del **conteo** de bases G/C en la ventana, y el
    max-pooling conserva únicamente la activación máxima, **descartando el
-   conteo**. La arquitectura no podía resolver el problema, por diseño. Ningún
-   ajuste de hiperparámetros lo habría salvado.
+   conteo**. Es decir, el max-pooling probablemente dificultaba el aprendizaje de una etiqueta que depende de frecuencias, porque la agregación por máximos puede perder información sobre el número de activaciones.
 
 Las correcciones aplicadas fueron: `AdaptiveAvgPool1d` en lugar de
 `AdaptiveMaxPool1d` (el promedio sí preserva la información de conteo), pesos de
 clase en `CrossEntropyLoss`, tasa de aprendizaje de 1e-3 a 1e-2, y **codificación
 one-hot de 4 canales** en reemplazo de enteros 0–3, codificar las bases como una
 escala numérica le sugiere a la red que T está "más lejos" de A que C, lo cual es
-biológicamente falso.
+biológicamente falso. 
+
+Los cuatro cambios se aplicaron **de forma simultánea**, de modo que no se puede
+atribuir la mejora a una sola de las modificaciones; para eso
+haría falta un estudio de ablación, con el fin de aislar una por una.
+
+Además es importante señalar que las cifras del diagnóstico (3811 ejemplos de la
+clase 0, línea base 0.7440) corresponden a la **versión inicial**, generada con
+una configuración de muestreo distinta. En la corrida final el conjunto se
+regeneró y el balance de clases cambió, la clase mayoritaria pasó a ser la
+clase 1. Por eso la línea base y las proporciones difieren entre ambos momentos,
+y no se trata de resultados mezclados sino de dos conjuntos distintos.
+
+El peso registrado en `cnn_results.csv` bajo el nombre `minority_weight`
+corresponde en realidad al **peso aplicado a la clase 1**; al ser esta la clase
+mayoritaria, un valor menor que 1 la penaliza, que es el comportamiento
+buscado.
 
 ### Proceso 2: integración de procesos externos
 
@@ -436,20 +490,21 @@ complementaria. Los alineadores reales resuelven esto igual, buscan una
 #| echo: false
 
 md(f"""
-**Por qué 16 bases.** El largo se eligió por especificidad, no por tanteo. Las
-apariciones esperadas por azar de un patrón de largo $L$ son $G/4^L$; con
-$G = {G:,}$ bases y $L = {L}$, eso da **{esperadas:.4f}** apariciones esperadas.
-Es decir, la probabilidad de que un calce sea casualidad es inferior al 0.1%: si
-aparece, es real. El valor es parametrizable con `--semilla`.
-""".replace(",", " "))
+**Justificación del uso de las 16 bases.** El largo se eligió por especificidad, 
+no por tanteo. Bajo un modelo nulo de bases independientes y equiprobables, 
+las apariciones esperadas de un patrón de largo $L$ son $G/4^L$; 
+con $G = {G:,}$ bases y $L = {L}$, eso da **{esperadas:.4f}** ocurrencias esperadas. 
+Esto indica una alta especificidad teórica, aunque no demuestra por sí solo que toda
+coincidencia observada sea biológicamente verdadera, en sí, los genomas contienen
+repeticiones, composición desigual de bases y regiones de baja complejidad que
+el modelo nulo no recoge. El valor es parametrizable con `--semilla`.
+""")
 ```
 
-Las adaptaciones sobre el código externo están documentadas en detalle en el
-README (sección 6). Las dos de fondo fueron **invertir la dirección de búsqueda**,
-para alinearla con lo que se pide en el trabajo y con lo que hace el Proceso 1; y
-**reimplementar `generaReporteTask` de R a Python**, dado que el original leía
-salidas de procesos que no forman parte de este pipeline y habría exigido
-arrastrar un entorno de R completo para un solo script.
+El reporte del Proceso 3 (`Reports/final_report.html`) y su figura
+(`Results/Figures/final_summary_plot.png`) se generan automáticamente en cada
+corrida y son distintos del reporte del Proceso 2, que resume únicamente la
+búsqueda Bash.
 
 ### Proceso 3: comparación entre herramientas
 
@@ -472,18 +527,19 @@ md(tabla(["Métrica", "PySpark", "Bash + awk"], [
 ]))
 
 md(f"""
-**Interpretación** Las dos herramientas **no ejecutan la misma carga**: PySpark evalúa {int(fila['n_patterns'])} patrones de largo variable contando todas las
-ocurrencias solapadas, mientras Bash busca {n_b} reads por una semilla 
-fija y se detiene en la primera coincidencia.
-Comparar tiempos totales sería engañoso, por eso la comparación se normaliza por
-búsqueda.
+Las dos herramientas **no ejecutan la misma carga**: PySpark evalúa
+{int(fila['n_patterns'])} patrones de largo variable contando todas las
+ocurrencias solapadas, mientras Bash busca {n_b} reads por una semilla fija y se
+detiene en la primera coincidencia.
 
-Aun así, la lectura correcta es cualitativa, PySpark resulta
-**{bash_ms/spark_ms:.1f} veces más rápido por búsqueda** haciendo estrictamente
-*más* trabajo en cada una. Pero paga un costo fijo de arranque, la JVM y el
-contexto de Spark. que esta métrica no captura y que solo se amortiza con
-volumen. Con {n_b} búsquedas, Bash es la herramienta razonable; con
-{int(fila['n_patterns'])} o más, deja de serlo.
+En las configuraciones evaluadas, el cociente entre los tiempos medios por
+búsqueda fue de aproximadamente **{bash_ms/spark_ms:.1f}**. No obstante, ese
+valor **no constituye una comparación controlada de rendimiento**: ambas
+herramientas ejecutan operaciones distintas y el cálculo no incorpora de forma
+equivalente los costos de inicialización, en particular el arranque de la JVM y
+del contexto de Spark. Determinar a partir de qué volumen conviene una u otra
+exigiría medir ambas sobre exactamente la misma tarea y varios tamaños de
+entrada.
 """)
 ```
 
@@ -491,6 +547,8 @@ El reporte del Proceso 3 (`Reports/final_report.html`) y su figura
 (`Results/Figures/final_summary_plot.png`) se generan automáticamente en cada
 corrida y son distintos del reporte del Proceso 2, que resume únicamente la
 búsqueda Bash.
+
+---
 
 ## Reproducibilidad
 
@@ -568,9 +626,7 @@ corrección.
 errores detectados por contraste con una línea base, la CNN que funcionaba con
 un accuracy igual al de la clase mayoritaria, y el gráfico de recurrencia que
 mostraba estructura donde solo había azar. En ambos casos el resultado parecía
-correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La
-línea base no funcionó como un requisito sino es lo que distingue un resultado de
-algo que no era real.
+correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La línea base no fue un requisito, sino el criterio que permitió distinguir un resultado significativo de un comportamiento aparente.
 
 **Sobre la arquitectura de modelos.** El fallo de la CNN no era de ajuste sino de
 diseño, `AdaptiveMaxPool1d` descarta precisamente la información (el conteo) de
@@ -578,11 +634,7 @@ la que depende la etiqueta. Esto permitió saber que antes de ajustar
 hiperparámetros conviene verificar que la arquitectura sea capaz, en principio,
 de representar la función que se le pide aprender.
 
-**Sobre la reproducibilidad.** Para garantizar que la automatización dijera la verdad 
-sobre sí misma. Un pipeline que termina con `Succeeded: 5` puede haber publicado 
-sus resultados en una carpeta llamada `null`; un registro de estado de git 
-puede marcar "sucio" por inspeccionar el directorio que él mismo produce. 
-La reproducibilidad debe ser verificada y no solo declarada.
+**Sobre la reproducibilidad.** La automatización debe registrar de manera verificable su propio estado de ejecución. Un pipeline que termina con `Succeeded: 5` puede haber publicado sus resultados en una carpeta llamada `null`, y un registro del estado de git puede marcar el árbol como malo por inspeccionar el directorio que él mismo produce; de este modo,la reproducibilidad siempre debe ser verificada y no solo declarada.
 
 ## Declaración de uso de inteligencia artificial
 
