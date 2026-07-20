@@ -92,6 +92,24 @@ Los objetivos son
 El pipeline se compone de cinco procesos de Nextflow. La topología no es lineal, es decir,
 tras la descarga, el análisis PySpark y el cálculo Bash se ejecutan **en
 paralelo**, y de eso dependen los dos reportes.
+
+```
+DOWNLOAD_FIGSHARE
+   ├──> RUN_PROBLEM1_PYSPARK ──┐
+   └──> CALCULO_BASH ──┬───────┴──> FINAL_REPORT
+                       └──> GENERA_REPORTE
+```
+
+El diagrama se lee siguiendo las flechas. `DOWNLOAD_FIGSHARE` no depende de
+nada y por eso abre el flujo, es decir, descarga y verifica los archivos. De ahí
+salen **dos ramas independientes**, y esa bifurcación es uno de los puntos
+importantes; `RUN_PROBLEM1_PYSPARK` y `CALCULO_BASH` necesitan los mismos FASTA
+pero no se necesitan entre sí, de modo que Nextflow los ejecuta al mismo tiempo.
+Después, más abajo en el esquema, las dos flechas que llegan a `FINAL_REPORT`
+reflejan que el Proceso 3 se genera a partir de los resultados de ambas ramas,
+las tablas de PySpark y el CSV del cálculo Bash. `GENERA_REPORTE` sale de
+`CALCULO_BASH`, porque solo resume esa búsqueda.
+
 La estructura es una decisión de diseño, al declarar
 únicamente las dependencias de datos reales, Nextflow paraleliza lo que puede
 paralelizarse. El grafo generado automáticamente está en
@@ -180,7 +198,7 @@ md(tabla(["Particiones", "Tiempo medio (s)", "Desv. est. (s)",
 import matplotlib.pyplot as plt
 import matplotlib.ticker
 
-fig, ax = plt.subplots(figsize=(8, 4.5))
+fig, ax = plt.subplots(figsize=(9, 5.5))
 ax.plot(bench["partitions"], bench["speedup"], "o-", color="#2c6fbb",
         linewidth=2, markersize=7, label="Speedup real")
 ax.plot(bench["partitions"], bench["partitions"], "--", color="gray",
@@ -200,9 +218,12 @@ ax2.set_ylabel("Eficiencia = speedup / particiones (%)", color="#c1512a")
 ax2.set_ylim(0, 115)
 
 lineas = ax.get_lines() + ax2.get_lines()
-ax.legend(lineas, [l.get_label() for l in lineas], loc="upper left", fontsize=9)
+ax.legend(lineas, [l.get_label() for l in lineas],
+          loc="upper center", bbox_to_anchor=(0.5, -0.13),
+          ncol=3, frameon=False, fontsize=10)
 ax.set_title("Escalamiento de la paralelización en PySpark")
-plt.tight_layout()
+fig.tight_layout()
+fig.subplots_adjust(bottom=0.22)
 plt.show()
 ```
 
