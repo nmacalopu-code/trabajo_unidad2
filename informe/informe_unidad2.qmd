@@ -428,7 +428,7 @@ Causas:
 
 1. **Desbalance de clases (76% / 24%).** Ante una función de pérdida sin
    ponderar, predecir siempre la clase mayoritaria es un óptimo local cómodo.
-2. **`AdaptiveMaxPool1d` era incompatible con la tarea.** La etiqueta 
+2. **Uso de `AdaptiveMaxPool1d` poco adecuado para una tarea dependiente de frecuencias.** La etiqueta 
    depende del **conteo** de bases G/C en la ventana, y el
    max-pooling conserva únicamente la activación máxima, **descartando el
    conteo**. Es decir, el max-pooling probablemente dificultaba el aprendizaje de una etiqueta que depende de frecuencias, porque la agregación por máximos puede perder información sobre el número de activaciones.
@@ -602,6 +602,9 @@ detalló, las cargas difieren en cantidad, algoritmo y criterio de conteo.
 replica las versiones verificadas, pero el entorno que se probó es el de `venv`
 descrito en `env/requirements.txt`.
 
+
+**La búsqueda Bash no es un alineador completo.** El proceso Bash implementa una búsqueda exacta de semillas, pero no un alineamiento con extensión, tolerancia a errores ni evaluación de la hebra reverso-complementaria. La analogía con los alineadores reales se refiere solo a la estrategia de sembrado, no a sus capacidades completas.
+
 ## Conclusiones
 
 **Sobre la paralelización.** Spark no es un acelerador automático. En esta carga
@@ -618,9 +621,9 @@ un accuracy igual al de la clase mayoritaria, y el gráfico de recurrencia que
 sugería visualmente una estructura cuya densidad, al cuantificarse, resultó próxima a la esperada bajo el modelo nulo considerado. En ambos casos el resultado parecía
 correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La línea base no fue un requisito, sino el criterio que permitió distinguir un resultado significativo de un comportamiento aparente.
 
-**Sobre la arquitectura de modelos.** El desempeño inicial de la CNN fue compatible con una arquitectura poco adecuada para una tarea propia de conteos. La sustitución de `AdaptiveMaxPool1d` por `AdaptiveAvgPool1d` formó parte de un conjunto de cuatro cambios aplicados simultáneamente; por ello no puede atribuirse causalmente la mejora a una sola modificación sin un estudio de descomposición.
+**Sobre la arquitectura de modelos.** El desempeño inicial de la CNN fue compatible con una arquitectura poco adecuada para una tarea propia de conteos. La sustitución de `AdaptiveMaxPool1d` por `AdaptiveAvgPool1d` formó parte de un conjunto de cuatro cambios aplicados simultáneamente; por ello no puede atribuirse causalmente la mejora a una sola modificación sin un estudio de ablación.
 
-**Sobre la reproducibilidad.** La automatización debe registrar de manera verificable su propio estado de ejecución. Un pipeline que termina con `Succeeded: 5` puede haber publicado sus resultados en una carpeta llamada `null`, y un registro del estado de git puede marcar el árbol como malo por inspeccionar el directorio que él mismo produce; de este modo,la reproducibilidad siempre debe ser verificada y no solo declarada.
+**Sobre la reproducibilidad.** La automatización debe registrar de manera verificable su propio estado de ejecución. Un pipeline que termina con `Succeeded: 5` puede haber publicado sus resultados en una carpeta llamada `null`, y un registro del estado de git puede marcar el árbol de trabajo como "sucio" por inspeccionar el directorio que él mismo produce; de este modo,la reproducibilidad siempre debe ser verificada y no solo declarada.
 
 ## Referencias y atribución del código externo
 
