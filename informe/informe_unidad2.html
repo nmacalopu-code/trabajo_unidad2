@@ -2332,7 +2332,8 @@ window.Quarto = {
   <li><a href="#reproducibilidad" id="toc-reproducibilidad" class="nav-link" data-scroll-target="#reproducibilidad"><span class="header-section-number">5</span> Reproducibilidad</a></li>
   <li><a href="#limitaciones" id="toc-limitaciones" class="nav-link" data-scroll-target="#limitaciones"><span class="header-section-number">6</span> Limitaciones</a></li>
   <li><a href="#conclusiones" id="toc-conclusiones" class="nav-link" data-scroll-target="#conclusiones"><span class="header-section-number">7</span> Conclusiones</a></li>
-  <li><a href="#declaración-de-uso-de-inteligencia-artificial" id="toc-declaración-de-uso-de-inteligencia-artificial" class="nav-link" data-scroll-target="#declaración-de-uso-de-inteligencia-artificial"><span class="header-section-number">8</span> Declaración de uso de inteligencia artificial</a></li>
+  <li><a href="#referencias-y-atribución-del-código-externo" id="toc-referencias-y-atribución-del-código-externo" class="nav-link" data-scroll-target="#referencias-y-atribución-del-código-externo"><span class="header-section-number">8</span> Referencias y atribución del código externo</a></li>
+  <li><a href="#declaración-de-uso-de-inteligencia-artificial" id="toc-declaración-de-uso-de-inteligencia-artificial" class="nav-link" data-scroll-target="#declaración-de-uso-de-inteligencia-artificial"><span class="header-section-number">9</span> Declaración de uso de inteligencia artificial</a></li>
   </ul>
 </nav>
 </div>
@@ -2820,8 +2821,20 @@ Figura 1: Arriba, speedup real frente al ideal. Abajo, eficiencia por partició
 <p><strong>Sobre la arquitectura de modelos.</strong> El desempeño inicial de la CNN fue compatible con una arquitectura poco adecuada para una tarea propia de conteos. La sustitución de <code>AdaptiveMaxPool1d</code> por <code>AdaptiveAvgPool1d</code> formó parte de un conjunto de cuatro cambios aplicados simultáneamente; por ello no puede atribuirse causalmente la mejora a una sola modificación sin un estudio de descomposición.</p>
 <p><strong>Sobre la reproducibilidad.</strong> La automatización debe registrar de manera verificable su propio estado de ejecución. Un pipeline que termina con <code>Succeeded: 5</code> puede haber publicado sus resultados en una carpeta llamada <code>null</code>, y un registro del estado de git puede marcar el árbol como malo por inspeccionar el directorio que él mismo produce; de este modo,la reproducibilidad siempre debe ser verificada y no solo declarada.</p>
 </section>
-<section id="declaración-de-uso-de-inteligencia-artificial" class="level2" data-number="8">
-<h2 data-number="8" class="anchored" data-anchor-id="declaración-de-uso-de-inteligencia-artificial"><span class="header-section-number">8</span> Declaración de uso de inteligencia artificial</h2>
+<section id="referencias-y-atribución-del-código-externo" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="referencias-y-atribución-del-código-externo"><span class="header-section-number">8</span> Referencias y atribución del código externo</h2>
+<p>El Proceso 2 adapta los procesos <code>calculoBashTask</code> y <code>generaReporteTask</code> del repositorio externo indicado en la guía del curso:</p>
+<ul>
+<li><strong>Autor:</strong> David A. Castro S.</li>
+<li><strong>Repositorio:</strong> <code>tap_pipeline_gen</code></li>
+<li><strong>Enlace:</strong> https://github.com/DavidCastroSalinas/tap_pipeline_gen</li>
+<li><strong>Consultado en:</strong> julio de 2026</li>
+<li><strong>Licencia:</strong> el repositorio no declara un archivo de licencia explícito. Su uso en este trabajo corresponde a la adaptación con fines académicos.</li>
+</ul>
+<p>Las adaptaciones realizadas sobre ese código, búsqueda, reimplementación de <code>generaReporteTask</code> de R a Python, eliminación de rutas absolutas y correcciones de compatibilidad, se detallan en el README del proyecto (sección 6) y en la sección 4.6 de este informe.</p>
+</section>
+<section id="declaración-de-uso-de-inteligencia-artificial" class="level2" data-number="9">
+<h2 data-number="9" class="anchored" data-anchor-id="declaración-de-uso-de-inteligencia-artificial"><span class="header-section-number">9</span> Declaración de uso de inteligencia artificial</h2>
 <p>Este trabajo se desarrolló con apoyo de Claude (Anthropic) en la depuración de errores de Nextflow, Bash, Spark y Git, revisión de redacción y contraste de resultados intermedios. Por otra parte, el análisis del Problema 1, la publicacióndel conjunto de datos en Figshare, la creación y gestión del repositorio en GitHub, la construcción del pipeline en Nextflow, la adaptación de los procesos externos y la ejecución de todos los experimentos son de elaboración propia.</p>
 </section>
 

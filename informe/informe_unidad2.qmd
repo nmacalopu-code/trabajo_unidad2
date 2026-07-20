@@ -622,6 +622,21 @@ correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La
 
 **Sobre la reproducibilidad.** La automatización debe registrar de manera verificable su propio estado de ejecución. Un pipeline que termina con `Succeeded: 5` puede haber publicado sus resultados en una carpeta llamada `null`, y un registro del estado de git puede marcar el árbol como malo por inspeccionar el directorio que él mismo produce; de este modo,la reproducibilidad siempre debe ser verificada y no solo declarada.
 
+## Referencias y atribución del código externo
+
+El Proceso 2 adapta los procesos `calculoBashTask` y `generaReporteTask` del
+repositorio externo indicado en la guía del curso:
+
+- **Autor:** David A. Castro S.
+- **Repositorio:** `tap_pipeline_gen`
+- **Enlace:** https://github.com/DavidCastroSalinas/tap_pipeline_gen
+- **Consultado en:** julio de 2026
+- **Licencia:** el repositorio no declara un archivo de licencia explícito. Su
+  uso en este trabajo corresponde a la adaptación con fines académicos.
+
+Las adaptaciones realizadas sobre ese código, búsqueda, reimplementación de `generaReporteTask` de R a Python, eliminación de rutas absolutas y correcciones de compatibilidad, se detallan en el README del
+proyecto (sección 6) y en la sección 4.6 de este informe.
+
 ## Declaración de uso de inteligencia artificial
 
 Este trabajo se desarrolló con apoyo de Claude (Anthropic) en la depuración de errores de Nextflow, Bash, Spark y Git, revisión de redacción y contraste de resultados intermedios. Por otra parte, el análisis del Problema 1, la publicacióndel conjunto de datos en Figshare, la creación y gestión del repositorio en GitHub, la construcción del pipeline en Nextflow, la adaptación de los procesos externos y la ejecución de todos los experimentos son de elaboración propia.
