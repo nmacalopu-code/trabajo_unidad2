@@ -132,7 +132,7 @@ por_largo = regex.groupby("sequence_length")["match_count"].mean().round(1)
 
 md(f"""
 Se evaluaron **{n_patrones} patrones** ({par.get('n_reads','?')} reads ×
-{len(str(par.get('largos_patron','')).split(';'))} largos × 3 formas de
+{len(str(par.get('largos_patron','')).replace(';', ',').split(','))} largos × 3 formas de
 extracción), con un total de **{total:,} calces**.
 """.replace(",", " "))
 
@@ -229,9 +229,8 @@ acelera automáticamente, sino que hace que acelere mientras el trabajo por part
 costo de coordinarla.**
 
 La desviación estándar pasa de {bench.iloc[0].std_time_s:.3f} s con 1 partición
-a {peor_ef.std_time_s:.3f} s con {int(peor_ef.partitions)}. Esa dispersión
-creciente es la firma de la saturación, con muchas particiones compitiendo por
-los mismos núcleos, el tiempo depende cada vez más de la contención.
+a {peor_ef.std_time_s:.3f} s con {int(peor_ef.partitions)}. Es decir, {'aumenta' if peor_ef.std_time_s > bench.iloc[0].std_time_s else 'disminuye'}.
+{'Esa dispersión creciente es la firma de la saturación: con muchas particiones compitiendo por los mismos núcleos, el tiempo pasa a depender de la contención.' if peor_ef.std_time_s > bench.iloc[0].std_time_s else 'En esta corrida la dispersión no crece, de modo que la pérdida de eficiencia no se explica por contención inestable entre particiones, sino por el costo de coordinación, que es sistemático y no aleatorio: la medición es estable, lo que se degrada es el rendimiento marginal de cada partición añadida.'}
 """)
 
 if consistente:
@@ -526,7 +525,7 @@ un accuracy igual al de la clase mayoritaria, y el gráfico de recurrencia que
 mostraba estructura donde solo había azar. En ambos casos el resultado parecía
 correcto hasta que se comparó con lo que ocurriría sin modelo y sin señal. La
 línea base no funcionó como un requisito sino es lo que distingue un resultado de
-algo que no era real.**
+algo que no era real.
 
 **Sobre la arquitectura de modelos.** El fallo de la CNN no era de ajuste sino de
 diseño, `AdaptiveMaxPool1d` descarta precisamente la información (el conteo) de
